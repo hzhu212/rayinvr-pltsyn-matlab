@@ -7,14 +7,14 @@ function main(options)
     global path_pltsyn_par path_pltsyn_com;
 
     % option variables
-    path_in = options.path_in;
+    working_dir = options.working_dir;
     path_sin_m = options.path_sin_m;
-    path_win = fullfile(path_in, 'w.in');
-    path_synout = fullfile(path_in, 'syn.out');
-    path_sectout = fullfile(path_in, 'sect.out');
-    path_txout = fullfile(path_in, 'tx.out');
-    path_ampout = fullfile(path_in, 'amp.out');
-    path_pout = fullfile(path_in, 'p.out');
+    path_win = fullfile(working_dir, 'w.in');
+    path_synout = fullfile(working_dir, 'syn.out');
+    path_sectout = fullfile(working_dir, 'sect.out');
+    path_txout = fullfile(working_dir, 'tx.out');
+    path_ampout = fullfile(working_dir, 'amp.out');
+    path_pout = fullfile(working_dir, 'p.out');
 
     % init .par and .com parameters
     path_pltsyn_par = 'pltsyn_par.m';
@@ -33,7 +33,7 @@ function main(options)
     itrev = 0;
     idump = 0;
     nptsw = 19;
-    spmin = 1e-5;
+    spmin = 1e-6;
     ipol = 0;
     nskip = 1;
     vred = 8;
@@ -51,9 +51,9 @@ function main(options)
     else, ; end
     if iplot == -1 || iplot == 0, fid_19 = fopen(path_pout, 'w'); end
 
-    xscale = (xmax - xmin) / xmm;
-    tscale = (tmax - tmin) / tmm;
-    if itrev == 1, tscale = -tscale; end
+    % xscale = (xmax - xmin) / xmm;
+    % tscale = (tmax - tmin) / tmm;
+    % if itrev == 1, tscale = -tscale; end
 
     ipol = -2 * ipol + 1;
     if amp < 0., amp = (xmax - xmin) / 100; end
@@ -64,9 +64,9 @@ function main(options)
         fid_18 = fopen(path_ampout, 'w');
     end
 
-    if iroute ~= 1, ibcol = 0; end
+    % if iroute ~= 1, ibcol = 0; end
 
-    fun_pltsec(vred,xomit,nskip,ipol,spmin,nptsw,itrev,idump,iamp,twin,imeth,iroute);
+    fun_pltsec(vred, xomit, nskip, ipol, spmin, nptsw, itrev, idump, iamp, twin, imeth, iroute);
 
     % if iplots == 1, fun_plotnd(1); end
 
