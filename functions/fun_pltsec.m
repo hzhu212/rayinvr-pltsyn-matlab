@@ -484,6 +484,7 @@ end
 function plot_seis(traces, fig)
 % plot seismic traces
 
+    global my_xscale my_xclip;
     figure(fig);
     hold on;
     for ii = 1:length(traces)
@@ -491,8 +492,14 @@ function plot_seis(traces, fig)
         [time, amp] = deal(tr(:, 1), tr(:, 2));
         [x, y] = deal(amp, time);
 
-        % scale amplitude
-        % x = x(1) + (x - x(1)) * 10;
+        % scale and clip
+        amp = x - x(1);
+        amp = amp * my_xscale;
+        if my_xclip > 0
+            idx = abs(amp) > my_xclip;
+            amp(idx) = sign(amp(idx)) * my_xclip;
+        end
+        x = x(1) + amp;
 
         plot(x, y, 'k-');
     end

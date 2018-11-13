@@ -38,6 +38,15 @@ function main(options)
     nskip = 1;
     vred = 8;
 
+    % default values for custom parameters (not defined by Zelt rayinvr).
+    % all prefixed by 'my_'.
+    % these are only default values, please set them in `s.in`.
+    global my_xscale my_xclip;
+    % scale rate for x axis
+    my_xscale = 1;
+    % clip for amptitude. if <= 0, do not clip, otherwise, clip to `my_xclip`
+    my_xclip = 0;
+
     % read s.in variables
     run(path_sin_m);
 

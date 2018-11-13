@@ -2,7 +2,7 @@ function start_pltsyn(working_dir)
 % start_main(working_dir)
 %
 % Starting script for rayinvr pltsyn.
-% @param working_dir: the directory contains *.in files.
+% @param working_dir: the directory that contains *.in files.
 
     if nargin < 1
         fprintf('Argument "working_dir" is required.\n');
