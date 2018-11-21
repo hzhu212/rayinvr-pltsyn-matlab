@@ -40,9 +40,6 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
     pi2 = pi * 2;
     dens = dens / 2;
     fifi = double(ifill);
-    % tol = tol / xscale;
-    % tol = 1e-5;
-    % npts = round((tmax - tmin) * sps) + 1;
 
     % NEW
     % sample rate(s), 0.001 -- 1ms
@@ -59,38 +56,10 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
     nomit = find(xomit(1:pseis) < -99998, 1);
     if isempty(nomit), nomit = pseis;
     else, nomit = nomit - 1; end
-    % for ii = 1:pseis
-    %     if xomit(ii) < -99998, break; end
-    %     nomit = nomit + 1;
-    % end
 
     % 50
     % 80
     time(1:npts) = tmin:sample_rate:tmax;
-    % for ii = 1:npts
-    %     if itrev ~= 1
-    %         time(ii) = (ii - 1) / sps / tscale + orig;
-    %     else
-    %         time(ii) = (tmin + (ii-1)/sps - tmax) / tscale + orig;
-    %     end
-    % end
-
-    % if ishade == 1
-    %     ptmm = abs(tscale) * sps;
-    %     if ptmm < dens
-    %         nvaplt = round(dens * npts / ptmm);
-    %     else
-    %         nvaplt = npts;
-    %     end
-    %     if nvaplt > ppseis
-    %         fprintf('***  interpolated trace for shading too long  ***\n');
-    %         return;
-    %     end
-    %     if nvaplt > npts
-    %         % fun_intrtr(time, npts, nvaplt);
-    %         time(1:nvaplt) = interp1(1:npts, time(1:npts), 1:nvaplt);
-    %     end
-    % end
 
     % 90
     for ii = 2:2:60
@@ -149,14 +118,6 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
         end
         twave = (nwave - 1) / sps;
     end
-
-    % if itrev ~= 1
-    %     yorig = orig;
-    %     iside = 1;
-    % else
-    %     yorig = orig + tmm;
-    %     iside = -1;
-    % end
 
     % 1000: for each xshot
     tline = fgetl(fid_11);
@@ -220,22 +181,12 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
                 return;
             end
             if na(nseis) > 0
-                % if iscale == 2
-                %     range_ = abs(dist_(nseis) - xshot);
-                %     if range_ == 0, range_ = 0.001; end
-                %     rr = range_ ^ rcor;
-                % end
-
                 % 190: for each arrival
                 for jj = 1:na(nseis)
                     tline = fgetl(fid_11);
                     tmp = sscanf(tline, '%12f%12f%12f%4f');
                     assert(length(tmp) == 4, '***  insufficient data in sect_ext.out  ***\n');
                     sect(nseis, jj, 1:4) = tmp;
-                    % if iscale == 2
-                    %     samp = abs(sect(nseis, jj, 2) * rr);
-                    %     if samp > maxamp, maxamp = samp; end
-                    % end
                     if vred > 0
                         sect(nseis, jj, 1) = sect(nseis, jj, 1) - abs(dist_(nseis) - xshot) / vred;
                     end
@@ -244,12 +195,6 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
             % go to 180
             tline = fgetl(fid_11);
         end
-
-        % 99
-        % if iscale == 2
-        %     scalef = amp / maxamp;
-        %     fprintf('***  scalef=%15.5f  ***\n', scalef * xnorm * rcor);
-        % end
 
         if iamp > 0
             [xrs, trs, urs, irs] = fun_load_txin(path_txout);
@@ -286,7 +231,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
                 if any(xomit(1:nomit) - dist_(ii) < 0.001), continue; end
             end
             nsexsp = nsexsp + 1;
-            % if na(ii) > 0
+
             % 270
             % for each event
             % each seismogram will receive several events, like: 3.2, 4.2, ...
@@ -348,72 +293,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
                     fprintf(fid_12, '%4d', s(1:npts));
                 end
 
-                % 109
-                % for jj = 1:namp
-                %     if abs(xamp(jj) - dist_(ii)) < 0.001
-                %         n0 = round((tamp(jj) - tmin) * sps) + 1;
-                %         n1 = n0 + nwin;
-                %         if n0 < 1, n0 = 1; end
-                %         if n1 < 1, n1 = 1; end
-                %         if n0 > npts, n0 = npts; end
-                %         if n1 > npts, n1 = npts; end
-                %         nwina = n1 - n0 + 1;
-                %         minamp = 0;
-                %         maxamp = 0;
-
-                %         if n1 > n0
-                %             if imeth ~= 1
-                %                 % 360
-                %                 minamp = min(s(n0:n1));
-                %                 maxamp = max(s(n0:n1));
-                %                 maxamp = (abs(minamp) + abs(maxamp)) / 2;
-                %             else
-                %                 maxamp = sum(abs(s(n0:n1))) / nwina;
-                %             end
-                %             if maxamp > 0, maxamp = log10(maxamp); end
-                %             fprintf(fid_18, '%10.3f%10.3f%10.3f%10d\n', xamp(jj), maxamp, 0, ipamp(jj));
-                %         end
-                %     end
-                % end
-
                 if iplot < -1, continue; end
-                % if iscale == 0
-                %     % 480
-                %     max_ = max(abs(s(1:npts)));
-                %     if max_ > 0
-                %         f = amp / max_;
-                %         % 490
-                %         s(1:npts) = f * s(1:npts);
-                %     end
-                % end
-                % if iscale > 0
-                %     range_ = abs(dist_(ii) - xshot);
-                %     if range_ == 0, range_ = 0.001; end
-                % end
-                % if iscale == 1
-                %     srn = scalef * (range_ / xnorm) ^ rcor;
-                %     % 580
-                %     s(1:npts) = srn * s(1:npts);
-                % end
-                % if iscale == 2
-                %     sr = scalef * range_ ^ rcor;
-                %     % 610
-                %     s(1:npts) = sr * s(1:npts);
-                % end
-                % if clip > 0 && iscale == 1
-                %     % 590
-                %     idx = abs(s(1:npts)) > clip;
-                %     s(idx) = sign(s(idx)) * clip;
-                % end
-                % tmean = (dist_(ii) - xmin) / xscale + orig;
-                % 600
-                % s(1:npts) = s(1:npts) / xscale + tmean;
-                % if ishade == 1
-                %     if nvaplt > npts
-                %         s(1:nvaplt) = interp1(1:npts, s(1:npts), 1:nvaplt);
-                %     end
-                %     npts = nvaplt;
-                % end
                 if tol > 0 && npts > 2
                     % find the points that need to be plot: the amplitude should reach the tolerance
                     idx_amp = find(abs(s(1:npts)) >= tol);
@@ -470,9 +350,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
         if xshotn > -999998
             xshot = xshotn;
         end
-
         % go to 1000
-        % tline = fgetl(fid_11);
     end
 
     if namp > 0
@@ -518,7 +396,7 @@ function plot_per_shot_event(fig, color_, traces, xreceivers)
         end
         x = xbase + amp;
 
-        curve = plot(x, y, [color_, '--']);
+        curve = plot(x, y, [color_, ':']);
         % alpha(curve, 0.3);
     end
     hold off;
