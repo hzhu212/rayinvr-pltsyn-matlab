@@ -162,9 +162,9 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
     tline = fgetl(fid_11);
     while ischar(tline)
         tmp = sscanf(tline, '%10f%10d');
-        assert(length(tmp) == 2 && abs(tmp(2)) == 1, '*** unexpected error in reading sect.out ***');
+        assert(length(tmp) == 2 && abs(tmp(2)) == 1, '*** unexpected error in reading sect_ext.out ***');
         if isempty(tmp)
-            fprintf('***  insufficient data in sect.out  ***\n');
+            fprintf('***  insufficient data in sect_ext.out  ***\n');
             return;
         end
         [xshot, idum] = deal(tmp(1), tmp(2));
@@ -229,9 +229,9 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
                 % 190: for each arrival
                 for jj = 1:na(nseis)
                     tline = fgetl(fid_11);
-                    tmp = sscanf(tline, '%12f');
-                    assert(length(tmp) == 3, '***  insufficient data in sect.out  ***\n');
-                    sect(nseis, jj, 1:3) = tmp;
+                    tmp = sscanf(tline, '%12f%12f%12f%4f');
+                    assert(length(tmp) == 4, '***  insufficient data in sect_ext.out  ***\n');
+                    sect(nseis, jj, 1:4) = tmp;
                     % if iscale == 2
                     %     samp = abs(sect(nseis, jj, 2) * rr);
                     %     if samp > maxamp, maxamp = samp; end
@@ -270,8 +270,13 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
         end
         idir = 1;
 
+        % length of these arrays or cells will be equal to `nseis`
         traces = {};
+        xreceivers = [];
+        raycodes = [];
+
         % 70
+        % for each seismogram
         for ii = 1:nseis
             npts = nhpts;
             if mod(ii, nskip) ~= 0, continue; end
@@ -281,183 +286,178 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
                 if any(xomit(1:nomit) - dist_(ii) < 0.001), continue; end
             end
             nsexsp = nsexsp + 1;
-            % 170
-            r(1:nptsp) = 0;
-            if na(ii) > 0
-                % 270
-                for jj = 1:na(ii)
-                    if iconv == 1 && (sect(ii,jj,1)+twave < tmin || sect(ii,jj,1) > tmax)
-                        continue;
-                    end
-                    % nstart = round((sect(ii,jj,1) - tmin) * sps);
-                    nstart = round((sect(ii,jj,1) - tmin) / sample_rate);
-                    sn = sin(sect(ii,jj,3)) * sect(ii,jj,2);
-                    kpos = nstart + 61;
-                    if kpos > 0 && kpos <= nptsp
-                        r(kpos) = r(kpos) + cos(sect(ii,jj,3)) * sect(ii,jj,2);
-                    end
-                    % TODO
-                    % 370
-                    for k = 2:2:120
-                        kpos = nstart + k;
-                        if kpos > 0 && kpos <= nptsp
-                            r(kpos) = r(kpos) - hil(k) * sn;
-                        end
-                    end
+            % if na(ii) > 0
+            % 270
+            % for each event
+            % each seismogram will receive several events, like: 3.2, 4.2, ...
+            for jj = 1:na(ii)
+                % 170
+                r(1:nptsp) = 0;
+
+                if iconv == 1 && (sect(ii,jj,1)+twave < tmin || sect(ii,jj,1) > tmax)
+                    continue;
                 end
-            end
-            if nsmth > 0
-                % 280
-                for jj = 1:nsmth
-                    [r, ~] = fun_smooth(r, nptsp);
+                cur_raycode = sect(ii,jj,4);
+                % nstart = round((sect(ii,jj,1) - tmin) * sps);
+                nstart = round((sect(ii,jj,1) - tmin) / sample_rate);
+                sn = sin(sect(ii,jj,3)) * sect(ii,jj,2);
+                kpos = nstart + 61;
+                if kpos > 0 && kpos <= nptsp
+                    r(kpos) = r(kpos) + cos(sect(ii,jj,3)) * sect(ii,jj,2);
                 end
-            end
-            if iconv == 1
                 % TODO
-                % 470
-                for jj = 1:npts
-                    if jj <= nwave - 60
-                        kmax = jj - 59;
-                    else
-                        kmax = nwave;
+                % 370
+                for k = 2:2:120
+                    kpos = nstart + k;
+                    if kpos > 0 && kpos <= nptsp
+                        r(kpos) = r(kpos) - hil(k) * sn;
                     end
-                    % 570
-                    k = 1:kmax;
-                    s(jj) = sum(wavlet(k) .* r(jj-k+60));
                 end
-            else
-                % 460
-                s(1:npts) = r((1:npts) + 60);
-            end
 
-            if inmo == 1
-                s = fun_nmo(s, npts, sps, tmin, dist_(ii), vrms);
-            end
-
-            if idump == 1
-                % FIXME
-                % 35
-                fprintf(fid_12, '%4d', s(1:npts));
-            end
-
-            % 109
-            % for jj = 1:namp
-            %     if abs(xamp(jj) - dist_(ii)) < 0.001
-            %         n0 = round((tamp(jj) - tmin) * sps) + 1;
-            %         n1 = n0 + nwin;
-            %         if n0 < 1, n0 = 1; end
-            %         if n1 < 1, n1 = 1; end
-            %         if n0 > npts, n0 = npts; end
-            %         if n1 > npts, n1 = npts; end
-            %         nwina = n1 - n0 + 1;
-            %         minamp = 0;
-            %         maxamp = 0;
-
-            %         if n1 > n0
-            %             if imeth ~= 1
-            %                 % 360
-            %                 minamp = min(s(n0:n1));
-            %                 maxamp = max(s(n0:n1));
-            %                 maxamp = (abs(minamp) + abs(maxamp)) / 2;
-            %             else
-            %                 maxamp = sum(abs(s(n0:n1))) / nwina;
-            %             end
-            %             if maxamp > 0, maxamp = log10(maxamp); end
-            %             fprintf(fid_18, '%10.3f%10.3f%10.3f%10d\n', xamp(jj), maxamp, 0, ipamp(jj));
-            %         end
-            %     end
-            % end
-
-            if iplot < -1, continue; end
-            % if iscale == 0
-            %     % 480
-            %     max_ = max(abs(s(1:npts)));
-            %     if max_ > 0
-            %         f = amp / max_;
-            %         % 490
-            %         s(1:npts) = f * s(1:npts);
-            %     end
-            % end
-            % if iscale > 0
-            %     range_ = abs(dist_(ii) - xshot);
-            %     if range_ == 0, range_ = 0.001; end
-            % end
-            % if iscale == 1
-            %     srn = scalef * (range_ / xnorm) ^ rcor;
-            %     % 580
-            %     s(1:npts) = srn * s(1:npts);
-            % end
-            % if iscale == 2
-            %     sr = scalef * range_ ^ rcor;
-            %     % 610
-            %     s(1:npts) = sr * s(1:npts);
-            % end
-            % if clip > 0 && iscale == 1
-            %     % 590
-            %     idx = abs(s(1:npts)) > clip;
-            %     s(idx) = sign(s(idx)) * clip;
-            % end
-            % tmean = (dist_(ii) - xmin) / xscale + orig;
-            % 600
-            % s(1:npts) = s(1:npts) / xscale + tmean;
-            % if ishade == 1
-            %     if nvaplt > npts
-            %         s(1:nvaplt) = interp1(1:npts, s(1:npts), 1:nvaplt);
-            %     end
-            %     npts = nvaplt;
-            % end
-            if tol > 0 && npts > 2
-                nplt = 1;
-                sp(nplt) = s(1);
-                tp(nplt) = time(1);
-
-                % 700
-                % idxp = abs(s(2:npts-1) - tmean) >= tol;
-                idxp = find(abs(s(2:npts-1)) >= tol);
-                idxp = unique([idxp-1, idxp, idxp+1]);
-                countp = length(idxp);
-                if countp > 0
-                    nplt = nplt + countp;
-                    sp(2:2+countp-1) = s(idxp);
-                    tp(2:2+countp-1) = time(idxp);
+                if nsmth > 0
+                    % 280
+                    for jj = 1:nsmth
+                        [r, ~] = fun_smooth(r, nptsp);
+                    end
                 end
-                % for jj = 2:npts-1
-                %     if abs(s(jj) - tmean) >= tol
-                %         nplt = nplt + 1;
-                %         sp(nplt) = s(jj);
-                %         tp(nplt) = time(jj);
+                if iconv == 1
+                    % TODO
+                    % 470
+                    for jj = 1:npts
+                        if jj <= nwave - 60
+                            kmax = jj - 59;
+                        else
+                            kmax = nwave;
+                        end
+                        % 570
+                        k = 1:kmax;
+                        s(jj) = sum(wavlet(k) .* r(jj-k+60));
+                    end
+                else
+                    % 460
+                    s(1:npts) = r((1:npts) + 60);
+                end
+
+                if inmo == 1
+                    s = fun_nmo(s, npts, sps, tmin, dist_(ii), vrms);
+                end
+
+                if idump == 1
+                    % FIXME
+                    % 35
+                    fprintf(fid_12, '%4d', s(1:npts));
+                end
+
+                % 109
+                % for jj = 1:namp
+                %     if abs(xamp(jj) - dist_(ii)) < 0.001
+                %         n0 = round((tamp(jj) - tmin) * sps) + 1;
+                %         n1 = n0 + nwin;
+                %         if n0 < 1, n0 = 1; end
+                %         if n1 < 1, n1 = 1; end
+                %         if n0 > npts, n0 = npts; end
+                %         if n1 > npts, n1 = npts; end
+                %         nwina = n1 - n0 + 1;
+                %         minamp = 0;
+                %         maxamp = 0;
+
+                %         if n1 > n0
+                %             if imeth ~= 1
+                %                 % 360
+                %                 minamp = min(s(n0:n1));
+                %                 maxamp = max(s(n0:n1));
+                %                 maxamp = (abs(minamp) + abs(maxamp)) / 2;
+                %             else
+                %                 maxamp = sum(abs(s(n0:n1))) / nwina;
+                %             end
+                %             if maxamp > 0, maxamp = log10(maxamp); end
+                %             fprintf(fid_18, '%10.3f%10.3f%10.3f%10d\n', xamp(jj), maxamp, 0, ipamp(jj));
+                %         end
                 %     end
                 % end
 
-                nplt = nplt + 1;
-                sp(nplt) = s(npts);
-                tp(nplt) = time(npts);
-            else
-                nplt = npts;
-                % 710
-                sp(1:nplt) = s(1:nplt);
-                tp(1:nplt) = time(1:nplt);
-            end
-            sp = sp + dist_(ii);
+                if iplot < -1, continue; end
+                % if iscale == 0
+                %     % 480
+                %     max_ = max(abs(s(1:npts)));
+                %     if max_ > 0
+                %         f = amp / max_;
+                %         % 490
+                %         s(1:npts) = f * s(1:npts);
+                %     end
+                % end
+                % if iscale > 0
+                %     range_ = abs(dist_(ii) - xshot);
+                %     if range_ == 0, range_ = 0.001; end
+                % end
+                % if iscale == 1
+                %     srn = scalef * (range_ / xnorm) ^ rcor;
+                %     % 580
+                %     s(1:npts) = srn * s(1:npts);
+                % end
+                % if iscale == 2
+                %     sr = scalef * range_ ^ rcor;
+                %     % 610
+                %     s(1:npts) = sr * s(1:npts);
+                % end
+                % if clip > 0 && iscale == 1
+                %     % 590
+                %     idx = abs(s(1:npts)) > clip;
+                %     s(idx) = sign(s(idx)) * clip;
+                % end
+                % tmean = (dist_(ii) - xmin) / xscale + orig;
+                % 600
+                % s(1:npts) = s(1:npts) / xscale + tmean;
+                % if ishade == 1
+                %     if nvaplt > npts
+                %         s(1:nvaplt) = interp1(1:npts, s(1:npts), 1:nvaplt);
+                %     end
+                %     npts = nvaplt;
+                % end
+                if tol > 0 && npts > 2
+                    % find the points that need to be plot: the amplitude should reach the tolerance
+                    idx_amp = find(abs(s(1:npts)) >= tol);
+                    % find all the boundary of the points that need to be plot. set their amplitude to zero,
+                    % in case the tol is so large as to make a tilt straight line between the ploting-point
+                    % and unploting-point.
+                    idx_zero = setdiff([idx_amp-1, idx_amp+1], [idx_amp, 0, npts+1]);
+                    idx_plot = sort([idx_amp, idx_zero]);
+                    % add start point and end point
+                    idx_plot = unique([1, idx_plot, npts]);
+                    nplt = length(idx_plot);
+                    sp(1:nplt) = s(idx_plot);
+                    tp(1:nplt) = time(idx_plot);
+                else
+                    nplt = npts;
+                    % 710
+                    sp(1:nplt) = s(1:nplt);
+                    tp(1:nplt) = time(1:nplt);
+                end
+                sp = sp + dist_(ii);
 
-            ntplt = ntplt + nplt;
-            if idir == 1
-                nl1 = 1;
-                nl2 = 2;
-                nl3 = nplt;
-                istep = 1;
-            else
-                nl1 = nplt;
-                nl2 = nplt - 1;
-                nl3 = 1;
-                istep = -1;
+                ntplt = ntplt + nplt;
+                if idir == 1
+                    nl1 = 1;
+                    nl2 = 2;
+                    nl3 = nplt;
+                    istep = 1;
+                else
+                    nl1 = nplt;
+                    nl2 = nplt - 1;
+                    nl3 = 1;
+                    istep = -1;
+                end
+                % 620
+                traces{end+1} = [reshape(tp(nl1:istep:nl3), [], 1), reshape(sp(nl1:istep:nl3), [], 1)];
+                xreceivers(end+1) = dist_(ii);
+                raycodes(end+1) = cur_raycode;
             end
-            % 620
-            traces{end+1} = [reshape(tp(nl1:istep:nl3), [], 1), reshape(sp(nl1:istep:nl3), [], 1)];
+            % end
             idir = -idir;
         end
-        plot_seis(traces, fig_current);
-        % return;
+
+        % plot seismic records for each shot
+        plot_per_shot(fig_current, traces, xreceivers, raycodes);
 
         if iplot >= -1 && nsexsp > 0 && tol > 0
             per = ntplt / (nsexsp * npts) * 100;
@@ -481,27 +481,45 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
 end
 
 
-function plot_seis(traces, fig)
-% plot seismic traces
+function plot_per_shot(fig, traces, xreceivers, raycodes)
+% plot seismic traces for each shot
+% plot each event separatly with different colors
+
+    colors = ['r', 'g', 'b', 'c', 'm', 'y'];
+    all_codes = unique(raycodes);
+    for ii = 1:length(all_codes)
+        code = all_codes(ii);
+        color_ = colors(mod(ii, length(colors)));
+        indices = raycodes == code;
+        use_traces = traces(indices);
+        use_xreceivers = xreceivers(indices);
+        plot_per_shot_event(fig, color_, use_traces, use_xreceivers);
+    end
+end
+
+function plot_per_shot_event(fig, color_, traces, xreceivers)
+% plot seismic traces for each shot's specific event
 
     global my_xscale my_xclip;
     figure(fig);
     hold on;
     for ii = 1:length(traces)
+        xbase = xreceivers(ii);
         tr = traces{ii};
         [time, amp] = deal(tr(:, 1), tr(:, 2));
         [x, y] = deal(amp, time);
 
         % scale and clip
-        amp = x - x(1);
+        amp = x - xbase;
         amp = amp * my_xscale;
         if my_xclip > 0
             idx = abs(amp) > my_xclip;
             amp(idx) = sign(amp(idx)) * my_xclip;
         end
-        x = x(1) + amp;
+        x = xbase + amp;
 
-        plot(x, y, 'k-');
+        curve = plot(x, y, [color_, '--']);
+        % alpha(curve, 0.3);
     end
     hold off;
 end
