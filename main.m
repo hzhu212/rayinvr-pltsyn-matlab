@@ -11,7 +11,7 @@ function main(options)
     path_sin_m = options.path_sin_m;
     path_win = fullfile(working_dir, 'w.in');
     path_synout = fullfile(working_dir, 'syn.out');
-    path_sectout = fullfile(working_dir, 'sect.out');
+    path_sectout = fullfile(working_dir, 'sect_ext.out');
     path_txout = fullfile(working_dir, 'tx.out');
     path_ampout = fullfile(working_dir, 'amp.out');
     path_pout = fullfile(working_dir, 'p.out');
