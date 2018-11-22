@@ -1,4 +1,4 @@
-function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, twin, imeth, iroute)
+function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, twin, imeth, iroute)
 % pltsec routine for PLTSYN
 % plot synthetic seismic sections using the time, amplitude,
 % and phase of each arrival read in from unit 11
@@ -10,7 +10,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
     run(path_pltsyn_com);
 
     % declare variables
-    figs = {};
+    figs = [];
     namp = 0;
 
     % real
@@ -131,7 +131,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
         [xshot, idum] = deal(tmp(1), tmp(2));
         if iplot >= -1
             fig_current = figure('numbertitle', 'off', 'name', sprintf('xshot=%.3f km', xshot));
-            figs{end+1} = fig_current;
+            figs(end+1) = fig_current;
             set(fig_current, 'Position', [300, 200, 800, 500]);
             axes('FontName', 'Consolas');
             set(gca(), 'XAxisLocation', 'top', 'YDir', 'reverse');
@@ -337,7 +337,7 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
         end
 
         % plot seismic records for each shot
-        plot_per_shot(fig_current, traces, xreceivers, raycodes);
+        plot_per_shot(fig_current, xshot, traces, xreceivers, raycodes);
 
         if iplot >= -1 && nsexsp > 0 && tol > 0
             per = ntplt / (nsexsp * npts) * 100;
@@ -359,45 +359,90 @@ function fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump, iamp, tw
 end
 
 
-function plot_per_shot(fig, traces, xreceivers, raycodes)
+function plot_per_shot(fig, xshot, traces, xreceivers, raycodes)
 % plot seismic traces for each shot
 % plot each event separatly with different colors
 
+    % TODO: different shots and events have different number of receivers
+
     colors = ['r', 'g', 'b', 'c', 'm', 'y'];
     all_codes = unique(raycodes);
+    all_xreceivers = sort(unique(xreceivers));
+
+    per_event_data = {};
+
     for ii = 1:length(all_codes)
         code = all_codes(ii);
-        color_ = colors(mod(ii, length(colors)));
-        indices = raycodes == code;
-        use_traces = traces(indices);
-        use_xreceivers = xreceivers(indices);
-        plot_per_shot_event(fig, color_, use_traces, use_xreceivers);
+        color_ = colors(mod(ii,length(colors)) + 1);
+        tag = sprintf('%.4f-%.1f', xshot, code);
+
+        % find traces for this event
+        idx = raycodes == code;
+        use_xreceivers = xreceivers(idx);
+        use_traces = traces(idx);
+
+        % sort traces by x position of receivers
+        [use_xreceivers, sorted_idx] = sort(use_xreceivers);
+        use_traces = use_traces(sorted_idx);
+
+        plot_per_shot_event(fig, tag, color_, use_traces, use_xreceivers);
+
+        per_event_data{end+1} = use_traces;
     end
+
+    %% calculate stacked
+    % collect traces at each x receiver
+    traces_stacked = per_event_data{1};
+    for ii = 2:length(per_event_data)
+        traces = per_event_data{ii};
+        for jj = 1:length(traces)
+            traces_stacked{jj} = [traces_stacked{jj}; traces{jj}];
+        end
+    end
+
+    % stack traces at each x receiver
+    for ii = 1:length(all_xreceivers)
+        xtrace = all_xreceivers(ii);
+        tr = traces_stacked{ii};
+        tb = array2table(tr, 'VariableNames', {'time', 'amp'});
+        tb.amp = tb.amp - xtrace;
+        tb = grpstats(tb, 'time', 'sum');
+        tb = sortrows(tb, 'time', 'asc');
+        new_tr = [tb.time, tb.sum_amp + xtrace];
+        traces_stacked{ii} = new_tr;
+    end
+
+    tag = sprintf('%.4f-all', xshot);
+    color_ = 'k';
+    plot_per_shot_event(fig, tag, color_, traces_stacked, all_xreceivers);
 end
 
-function plot_per_shot_event(fig, color_, traces, xreceivers)
+function plot_per_shot_event(fig, tag, color_, traces, xreceivers)
 % plot seismic traces for each shot's specific event
 
     global my_xscale my_xclip;
     figure(fig);
     hold on;
+    % plot for per event
     for ii = 1:length(traces)
-        xbase = xreceivers(ii);
+        xtrace = xreceivers(ii);
         tr = traces{ii};
         [time, amp] = deal(tr(:, 1), tr(:, 2));
         [x, y] = deal(amp, time);
 
         % scale and clip
-        amp = x - xbase;
+        amp = x - xtrace;
         amp = amp * my_xscale;
         if my_xclip > 0
             idx = abs(amp) > my_xclip;
             amp(idx) = sign(amp(idx)) * my_xclip;
         end
-        x = xbase + amp;
+        x = xtrace + amp;
 
         curve = plot(x, y, [color_, ':']);
         % alpha(curve, 0.3);
+        curve.UserData.tag = tag;
+        curve.UserData.xtrace = xtrace;
     end
     hold off;
 end

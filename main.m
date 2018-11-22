@@ -75,9 +75,9 @@ function main(options)
 
     % if iroute ~= 1, ibcol = 0; end
 
-    fun_pltsec(vred, xomit, nskip, ipol, spmin, nptsw, itrev, idump, iamp, twin, imeth, iroute);
-
-    % if iplots == 1, fun_plotnd(1); end
+    [figs] = fun_pltsec(vred, xomit, nskip, ipol, spmin, nptsw, itrev, idump, iamp, twin, imeth, iroute);
 
     fclose('all');
+
+    fun_store_plotdata(figs, working_dir);
 end
