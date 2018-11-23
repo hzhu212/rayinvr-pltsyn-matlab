@@ -196,6 +196,8 @@ function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump,
             tline = fgetl(fid_11);
         end
 
+        all_xreceivers = dist_(1:find(diff(dist_)<0, 1));
+
         if iamp > 0
             [xrs, trs, urs, irs] = fun_load_txin(path_txout);
             idx_shots = find(irs <= 0);
@@ -337,7 +339,7 @@ function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump,
         end
 
         % plot seismic records for each shot
-        plot_per_shot(fig_current, xshot, traces, xreceivers, raycodes);
+        plot_per_shot(fig_current, xshot, traces, xreceivers, raycodes, all_xreceivers);
 
         if iplot >= -1 && nsexsp > 0 && tol > 0
             per = ntplt / (nsexsp * npts) * 100;
@@ -359,22 +361,24 @@ function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump,
 end
 
 
-function plot_per_shot(fig, xshot, traces, xreceivers, raycodes)
+function plot_per_shot(fig, xshot, traces, xreceivers, raycodes, all_xreceivers)
 % plot seismic traces for each shot
 % plot each event separatly with different colors
 
-    % TODO: different shots and events have different number of receivers
+    color_set = ['r', 'g', 'b', 'c', 'm', 'y'];
+    code_set = unique(raycodes);
+    tag_fmt = '%.3f-%.1f';
+    if max(code_set) > 10
+        tag_fmt = '%.3f-%4.1f';
+    end
 
-    colors = ['r', 'g', 'b', 'c', 'm', 'y'];
-    all_codes = unique(raycodes);
-    all_xreceivers = sort(unique(xreceivers));
+    data_per_event = {};
+    xreceiver_per_event = {};
 
-    per_event_data = {};
-
-    for ii = 1:length(all_codes)
-        code = all_codes(ii);
-        color_ = colors(mod(ii,length(colors)) + 1);
-        tag = sprintf('%.4f-%.1f', xshot, code);
+    for ii = 1:length(code_set)
+        code = code_set(ii);
+        color_ = color_set(mod(ii,length(color_set)) + 1);
+        tag = sprintf(tag_fmt, xshot, code);
 
         % find traces for this event
         idx = raycodes == code;
@@ -385,48 +389,62 @@ function plot_per_shot(fig, xshot, traces, xreceivers, raycodes)
         [use_xreceivers, sorted_idx] = sort(use_xreceivers);
         use_traces = use_traces(sorted_idx);
 
-        plot_per_shot_event(fig, tag, color_, use_traces, use_xreceivers);
+        plot_per_shot_per_event(fig, tag, color_, use_traces, use_xreceivers, all_xreceivers);
 
-        per_event_data{end+1} = use_traces;
+        data_per_event{end+1} = use_traces;
+        xreceiver_per_event{end+1} = use_xreceivers;
     end
 
     %% calculate stacked
     % collect traces at each x receiver
-    traces_stacked = per_event_data{1};
-    for ii = 2:length(per_event_data)
-        traces = per_event_data{ii};
+    [traces_stacked{1:length(all_xreceivers)}] = deal([]);
+    for ii = 1:length(data_per_event)
+        traces = data_per_event{ii};
+        xrcvs = xreceiver_per_event{ii};
         for jj = 1:length(traces)
-            traces_stacked{jj} = [traces_stacked{jj}; traces{jj}];
+            trace_idx = find(abs(all_xreceivers-xrcvs(jj))<1e-6, 1);
+            traces_stacked{trace_idx} = [traces_stacked{trace_idx}; traces{jj}];
         end
     end
 
     % stack traces at each x receiver
     for ii = 1:length(all_xreceivers)
-        xtrace = all_xreceivers(ii);
+        xreceiver = all_xreceivers(ii);
         tr = traces_stacked{ii};
+        if isempty(tr)
+            continue;
+        end
         tb = array2table(tr, 'VariableNames', {'time', 'amp'});
-        tb.amp = tb.amp - xtrace;
+        tb.amp = tb.amp - xreceiver;
         tb = grpstats(tb, 'time', 'sum');
         tb = sortrows(tb, 'time', 'asc');
-        new_tr = [tb.time, tb.sum_amp + xtrace];
+        new_tr = [tb.time, tb.sum_amp + xreceiver];
         traces_stacked{ii} = new_tr;
     end
 
-    tag = sprintf('%.4f-all', xshot);
+    tag = sprintf('%.3f-all', xshot);
     color_ = 'k';
-    plot_per_shot_event(fig, tag, color_, traces_stacked, all_xreceivers);
+    plot_per_shot_per_event(fig, tag, color_, traces_stacked, all_xreceivers, all_xreceivers);
 end
 
-function plot_per_shot_event(fig, tag, color_, traces, xreceivers)
+function plot_per_shot_per_event(fig, tag, color_, traces, xreceivers, all_xreceivers)
 % plot seismic traces for each shot's specific event
 
     global my_xscale my_xclip;
+
     figure(fig);
+    time_limit = ylim;
+
     hold on;
     % plot for per event
-    for ii = 1:length(traces)
-        xtrace = xreceivers(ii);
-        tr = traces{ii};
+    for ii = 1:length(all_xreceivers)
+        xtrace = all_xreceivers(ii);
+        use_idx = find(abs(xreceivers-all_xreceivers(ii))<1e-6, 1);
+        if isempty(use_idx) || isempty(traces{use_idx})
+            tr = [time_limit', [xtrace; xtrace]];
+        else
+            tr = traces{use_idx};
+        end
         [time, amp] = deal(tr(:, 1), tr(:, 2));
         [x, y] = deal(amp, time);
 

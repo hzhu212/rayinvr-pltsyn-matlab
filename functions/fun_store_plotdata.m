@@ -5,9 +5,8 @@ function fun_store_plotdata(figs, working_dir)
     all_curves = [];
     for ii = 1:length(figs)
         fig = figs(ii);
-        all_curves = [all_curves, get(get(fig, 'Children'), 'Children')];
+        all_curves = [all_curves; get(get(fig, 'Children'), 'Children')];
     end
-    all_curves = all_curves(:);
 
     data = {};
     labels = {};
