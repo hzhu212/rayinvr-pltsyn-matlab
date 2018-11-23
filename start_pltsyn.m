@@ -22,4 +22,6 @@ function start_pltsyn(working_dir)
     clear(options.path_sin_m);
 
     main(options);
+
+    rmpath(genpath('./functions'));
 end
