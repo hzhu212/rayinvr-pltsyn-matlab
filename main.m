@@ -79,5 +79,5 @@ function main(options)
 
     fclose('all');
 
-    fun_store_plotdata(figs, working_dir);
+    fun_store_pltsyn_plot(figs, working_dir);
 end

@@ -1,4 +1,4 @@
-function fun_store_plotdata(figs, working_dir)
+function fun_store_pltsyn_plot(figs, working_dir)
 % store plot data to a .mat file
 
     file = fullfile(working_dir, 'plotdata.pltsyn.mat');
