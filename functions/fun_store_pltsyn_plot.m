@@ -18,8 +18,26 @@ function fun_store_pltsyn_plot(figs, working_dir)
         xtraces(end+1) = curve.UserData.xtrace;
         labels{end+1} = curve.UserData.tag;
     end
-    data{end+1} = xtraces;
-    data{end+1} = strjoin(labels, '|');
-    data = data';
-    save(file, 'data');
+
+    % group data by labels
+    [labels, idx] = sort(labels);
+    data = data(idx);
+    xtraces = xtraces(idx);
+    g = findgroups(labels);
+    labels = unique(labels);
+    data = splitapply(@(c) {c}, data, g);
+    xtraces = splitapply(@(c) {c}, xtraces, g);
+
+    % save all data and information to a struct
+    obj = struct();
+    fig1 = get(figs(1));
+    obj.labels = labels;
+    obj.xtraces = xtraces;
+    obj.data = data;
+    obj.xlabel = fig1.CurrentAxes.XLabel.String;
+    obj.ylabel = fig1.CurrentAxes.YLabel.String;
+    obj.xlim = fig1.CurrentAxes.XAxis.Limits;
+    obj.ylim = fig1.CurrentAxes.YAxis.Limits;
+
+    save(file, 'obj');
 end

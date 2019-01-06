@@ -422,7 +422,7 @@ function plot_per_shot(fig, xshot, traces, xreceivers, raycodes, all_xreceivers)
         traces_stacked{ii} = new_tr;
     end
 
-    tag = sprintf('%.3f-all', xshot);
+    tag = sprintf('%.3f-stacked', xshot);
     color_ = 'k';
     plot_per_shot_per_event(fig, tag, color_, traces_stacked, all_xreceivers, all_xreceivers);
 end
