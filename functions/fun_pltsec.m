@@ -148,6 +148,9 @@ function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump,
             ylim([tmin, tmax]);
             title(sprintf('xshot=%.3f km', xshot));
             box on;
+            % save some UserData
+            fig_current.UserData.vred = vred;
+
             iplots = 1;
         end
 

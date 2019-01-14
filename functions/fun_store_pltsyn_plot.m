@@ -8,14 +8,24 @@ function fun_store_pltsyn_plot(figs, working_dir)
         all_curves = [all_curves; get(get(fig, 'Children'), 'Children')];
     end
 
+    fig1 = get(figs(1));
+    % vred = fig1.UserData.vred;
+
     data = {};
     labels = {};
     xtraces = [];
     for ii = 1:length(all_curves)
         curve = all_curves(ii);
         if isempty(curve.UserData), continue; end
-        data{end+1} = [curve.XData; curve.YData];
-        xtraces(end+1) = curve.UserData.xtrace;
+        xdata = curve.XData;
+        ydata = curve.YData;
+        xtrace = curve.UserData.xtrace;
+        % % We should store original un-reduced time, although the plot used reduced data.
+        % if ~isempty(vred) && vred ~= 0
+        %     ydata = ydata + xtrace/vred;
+        % end
+        data{end+1} = [xdata; ydata];
+        xtraces(end+1) = xtrace;
         labels{end+1} = curve.UserData.tag;
     end
 
@@ -30,7 +40,6 @@ function fun_store_pltsyn_plot(figs, working_dir)
 
     % save all data and information to a struct
     obj = struct();
-    fig1 = get(figs(1));
     obj.labels = labels;
     obj.xtraces = xtraces;
     obj.data = data;
@@ -38,6 +47,7 @@ function fun_store_pltsyn_plot(figs, working_dir)
     obj.ylabel = fig1.CurrentAxes.YLabel.String;
     obj.xlim = fig1.CurrentAxes.XAxis.Limits;
     obj.ylim = fig1.CurrentAxes.YAxis.Limits;
+    obj.vred = fig1.UserData.vred;
 
     save(file, 'obj');
 end
