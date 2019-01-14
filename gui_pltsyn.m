@@ -8,11 +8,11 @@ function gui_pltsyn(working_dir)
 % gui_pltsyn(working_dir)
 % @param: working_dir: the directory that contains "plotdata.pltsyn.mat".(i.e. the *.in folder)
 
-    % working_dir = 'D:\Archive\Research\rayinvr\rayinvr-data\examples\e3';
-    if nargin < 1
-        fprintf('Argument "working_dir" is required.\n');
-        return;
-    end
+    working_dir = 'D:\Archive\Research\rayinvr\rayinvr-data\examples\e3';
+    % if nargin < 1
+    %     fprintf('Argument "working_dir" is required.\n');
+    %     return;
+    % end
 
     data_name = 'plotdata.pltsyn.mat';
     data_path = fullfile(working_dir, data_name);
@@ -23,16 +23,29 @@ function gui_pltsyn(working_dir)
             working_dir, data_name);
     end
 
-
+    % obj properties: labels, xtraces, data, xlabel, ylabel, xlim, ylim, vred
     obj = load_plotdata(data_path);
-    % obj properties: labels, xtraces, data, xlabel, ylabel, xlim, ylim
 
-    colors = {'r', 'g', 'b', 'c', 'm', 'y', [1,0.65,0], [0.5,0.2,0.9], [0.6,0.8,0.2], [0.4,0.2,0.2], [0.4,0.4,1]};
-    enable_color = false;
+    settings.colors = {'r', 'g', 'b', 'c', 'm', 'y', [1,0.65,0], [0.5,0.2,0.9], [0.6,0.8,0.2], [0.4,0.2,0.2], [0.4,0.4,1]};
+    settings.enable_color = false;
+    settings.xlim = obj.xlim;
+    settings.ylim = obj.ylim;
+    settings.xtick = sort(obj.xtraces{1});
+    vred = obj.vred;
+    if isempty(vred) || vred == 0, vred = inf; end
+    settings.vred_orig = vred;      % original v-reduce
+    settings.vred = vred;           % v-reduce
+    settings.tpi = 10;              % traces per inch
+    settings.amp_lim = 0;           % set upper limit for amplitude when plotting
+    % fill waveform: 1 - NO fill; 2 - fill with Black-White; 3 - fill with Red-Blue.
+    settings.fill_wave = 1;
 
     [xshots, raygroups] = get_raygroups_of_each_shot(obj.labels);
     gui = create_interface(xshots, raygroups, 'shot-', 'raygroup-');
-    set_axes(gui, obj);
+    % expand all the tree branches by default
+    on_expand_all();
+    % init axes
+    set_axes();
 
 
 %% -----------------------------------------------------------------------------
@@ -70,53 +83,50 @@ function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node
 % tree_branches, tree_nodes, branch_prefix, node_prefix are used to create CheckboxTree widget.
 
     gui = struct();
-    gui.window = figure(...
-        'Name', 'GUI of rayinvr-pltsyn', ...
-        'NumberTitle', 'off', ...
-        'MenuBar', 'none', ...
-        'ToolBar', 'figure' ...
-        );
+    gui.h.window = figure(...
+        'Name', 'GUI of rayinvr-pltsyn', 'NumberTitle', 'off', 'MenuBar', 'none', ...
+        'ToolBar', 'figure');
 
     % + File menu
-    fileMenu = uimenu(gui.window, 'Label', 'File');
+    fileMenu = uimenu(gui.h.window, 'Label', 'File');
     uimenu(fileMenu, 'Label', 'Export Plot', 'Callback', @on_export_plot);
     % uimenu(fileMenu, 'Label', 'Change Working Directory', 'Callback', @on_change_working_dir);
 
     % + Help menu
-    helpMenu = uimenu(gui.window, 'Label', 'Help');
+    helpMenu = uimenu(gui.h.window, 'Label', 'Help');
     uimenu(helpMenu, 'Label', 'README', 'Callback', @on_readme);
 
     % Arrange the main interface
-    mainLayout = uix.HBoxFlex('Parent', gui.window, 'Spacing', 3);
+    mainLayout = uix.HBoxFlex('Parent', gui.h.window, 'Spacing', 3);
 
     % + Create the panels
-    controlPanel = uix.BoxPanel('Parent', mainLayout, 'Title', 'Select Ray Groups');
+    controlPanel = uix.BoxPanel('Parent', mainLayout, 'Title', 'Select Ray Groups', 'HelpFcn', @on_control_panel_help);
     viewPanel = uix.BoxPanel('Parent', mainLayout, 'Title', 'Seismic View', 'Padding', 0);
 
     % + Adjust the main layout
     set(mainLayout, 'Widths', [200, -1]);
 
     % + Create the view
-    gui.viewAxes = axes('Parent', uicontainer('Parent', viewPanel));
+    gui.h.viewAxes = axes('Parent', uicontainer('Parent', viewPanel));
     % Minimize the margin of axes
-    set(gui.viewAxes, 'LooseInset', get(gui.viewAxes, 'TightInset'));
+    set(gui.h.viewAxes, 'LooseInset', get(gui.h.viewAxes, 'TightInset'));
     % Add context menu to plot area
-    ctxmenu1 = uicontextmenu(gui.window);
-    gui.viewAxes.UIContextMenu = ctxmenu1;
+    ctxmenu1 = uicontextmenu(gui.h.window);
+    gui.h.viewAxes.UIContextMenu = ctxmenu1;
     uimenu(ctxmenu1, 'Label', 'Enable Color', 'Callback', @on_enable_color);
     uimenu(ctxmenu1, 'Label', 'Disable Color', 'Callback', @on_disable_color);
 
     % + Create the controls
     controlLayout = uix.VBox('Parent', controlPanel, 'Padding', 3, 'Spacing', 3);
-    gui.checkboxTree = uiw.widget.CheckboxTree(...
+    gui.h.checkboxTree = uiw.widget.CheckboxTree(...
         'Parent', controlLayout, ...
         'MouseClickedCallback', @on_mouse_clicked, ...
         'SelectionChangeFcn', @on_select_changed ...
         );
-    gui.checkboxTree.Root.Name = 'Select All';
+    gui.h.checkboxTree.Root.Name = 'Select All';
     for ii = 1:length(tree_branches)
         branch_id = tree_branches{ii};
-        branch = uiw.widget.CheckboxTreeNode('Name', strcat(branch_prefix, branch_id), 'Parent', gui.checkboxTree.Root);
+        branch = uiw.widget.CheckboxTreeNode('Name', strcat(branch_prefix, branch_id), 'Parent', gui.h.checkboxTree.Root);
         branch.UserData = branch_id;
         branch_nodes = tree_nodes{ii};
         for jj = 1:length(branch_nodes)
@@ -129,55 +139,63 @@ function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node
     end
 
     % context menu for checkboxTree
-    ctxmenu2 = uicontextmenu(gui.window);
-    gui.checkboxTree.UIContextMenu = ctxmenu2;
+    ctxmenu2 = uicontextmenu(gui.h.window);
+    gui.h.checkboxTree.UIContextMenu = ctxmenu2;
     uimenu(ctxmenu2, 'Label', 'Expand All', 'Callback', @on_expand_all);
     uimenu(ctxmenu2, 'Label', 'Collapse All', 'Callback', @on_collapse_all);
 
-    % Scale by box
-    scaleContainer = uix.VBox('Parent', controlLayout, 'Padding', 3, 'Spacing', 3);
-    uicontrol('Style', 'text', 'Parent', scaleContainer, 'String', 'Scale By: ', 'HorizontalAlignment', 'left');
-    gui.scaleEdit = uicontrol('Style', 'edit', 'Parent', scaleContainer, 'Enable', 'off', 'String', 'null', 'HorizontalAlignment', 'left');
-    set(scaleContainer, 'Heights', [15, -1]);
-
+    buttonBox = uix.VBox('Parent', controlLayout, 'Spacing', 3);
+    % Settings button
+    settingButton = uicontrol(...
+        'Style', 'PushButton', 'Parent', buttonBox, 'String', 'Settings', ...
+        'Callback', @on_settings);
     % Apply button
     applyButton = uicontrol(...
-        'Style', 'PushButton', ...
-        'Parent', controlLayout, ...
-        'String', 'Apply', ...
-        'TooltipString', sprintf('Tick raygroups to show or hide.\n Select one raygroup to scale seismic amplitude to.'), ...
-        'Callback', @on_apply ...
-        );
-    set(controlLayout, 'Heights', [-1, 50, 30]); % Make the list fill the space
+        'Style', 'PushButton', 'Parent', buttonBox, 'String', 'Apply', ...
+        'Callback', @on_apply);
+
+    set(controlLayout, 'Heights', [-1, 65]); % Make the list fill the space
 end
 
 
 %% -----------------------------------------------------------------------------
-function [] = set_axes(gui, obj)
-% set_axes: initialize axes
-    ax = gui.viewAxes;
+function [] = set_axes()
+% initialize axes
+    ax = gui.h.viewAxes;
     set(ax, 'XAxisLocation', 'top', 'YDir', 'reverse', 'FontName', 'Consolas');
-    xlabel(ax, obj.xlabel, 'FontName', 'Consolas', 'FontSize', 11);
-    ylabel(ax, obj.ylabel, 'FontName', 'Consolas', 'FontSize', 11);
-    xlim(ax, obj.xlim);
-    ylim(ax, obj.ylim);
+    xlabel_ = 'Distance (km)';
+    if isinf(settings.vred)
+        ylabel_ = 'Time (s)';
+    else
+        ylabel_ = sprintf('Time-Distance/%.2f (s)', settings.vred);
+    end
+    xlabel(ax, xlabel_, 'FontName', 'Consolas', 'FontSize', 11);
+    ylabel(ax, ylabel_, 'FontName', 'Consolas', 'FontSize', 11);
+    xlim(ax, settings.xlim);
+    ylim(ax, settings.ylim);
+    % set(ax, 'XTick', settings.xtick, 'XTickLabel', [], 'XGrid', 'on');
+        % 'GridColorMode', 'manual', 'GridColor', 'k', 'GridAlpha', 1);
+    % ax.XAxis.MinorTickValues = settings.xtick;
+    % set(ax, 'XMinorGrid', 'on', 'MinorGridLineStyle', '-', 'MinorGridColor', 'k', ...
+    %     'MinorGridColorMode', 'manual', 'MinorGridAlpha', 0.1, 'MinorGridAlphaMode', 'manual');
     box on;
 end
 
 
 %% -----------------------------------------------------------------------------
-function [] = redraw(gui, obj)
-% redraw: redraw according to selected data
+function [] = redraw()
+% replot according to selected data
 
     % get all selected raygroups
     selected = {};
-    checked = gui.checkboxTree.CheckedNodes;
+    checked = gui.h.checkboxTree.CheckedNodes;
     for ii = 1:length(checked)
         selected = [selected, fun_get_end_nodes(checked(ii))];
     end
 
     % plot selected raygroups
     fun_plot_raygroups(selected);
+    set_axes();
 end
 
 %% -----------------------------------------------------------------------------
@@ -197,22 +215,42 @@ end
 function [] = fun_plot_raygroups(raygroups)
 % fun_plot_raygroups: plot raygroups
 % @param: raygroups: a cell array containing ray group names. e.g. {'2.00-3.2', '2.00-4.2'}
-    function [] = plot_raygroup(ax, data, xtraces, scaleby, name, color)
+    function [] = plot_raygroup(ax, data, xtraces, max_amp, name, color)
     % plot_raygroup: plot a single raygroup
-        xinc = min(abs(diff(xtraces)));
-        scale_rate = 1;
-        if ~isempty(scaleby) && scaleby
-            scale_rate = (xinc * 0.5) / abs(scaleby);
+        % get amplitude scale rate
+        if isempty(settings.amp_lim) || settings.amp_lim == 0
+            xinc = min(abs(diff(sort(xtraces))));
+            settings.amp_lim = xinc * 0.5;
+            settings.amp_lim = round(settings.amp_lim, 4);
         end
+        scale_rate = settings.amp_lim / abs(max_amp);
+
+        % max shift for vred
+        max_xtrace = max(xtraces);
+        max_shift = max_xtrace/settings.vred_orig - max_xtrace/settings.vred;
+
         for ii = 1:length(data)
             xydata = data{ii};
             x = xydata(1, :);
             y = xydata(2, :);
+            % shift for vred
+            shift = xtraces(ii)/settings.vred_orig - xtraces(ii)/settings.vred;
+            y = y + shift;
+
+            % fill reduce empty with zero amplitude wave
+            x = [xtraces(ii), x, xtraces(ii)];
+            if shift >= 0
+                y = [settings.ylim(1), y, settings.ylim(2)+max_shift];
+            else
+                y = [settings.ylim(1)+max_shift, y, settings.ylim(2)];
+            end
+
+            % scale amplitude
             amp = x - xtraces(ii);
             amp = amp * scale_rate;
             x = xtraces(ii) + amp;
             curve = plot(ax, x, y, '-', 'Color', color_, 'LineWidth', 0.5, 'DisplayName', name);
-            % only show legend for the first trace
+            % only show legend for the first trace of ray group
             if ii ~= 1
                 set(get(get(curve,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
             end
@@ -220,39 +258,40 @@ function [] = fun_plot_raygroups(raygroups)
     end
 
     % clear axes
-    cla(gui.viewAxes);
-    hold(gui.viewAxes, 'on');
+    cla(gui.h.viewAxes);
+    hold(gui.h.viewAxes, 'on');
 
     % plot raygroups
-    scaleby = fun_get_max_amplitude(gui.scaleEdit.String);
+    % max_amp = fun_get_max_amplitude(gui.h.scaleEdit.String);
+    max_amp = max(cellfun(@fun_get_max_amplitude, raygroups));
     for ii = 1:length(raygroups)
         color_ = 'k';
-        if enable_color
-            idx = mod(ii, length(colors));
-            if idx == 0, idx = len(colors); end
-            color_ = colors{idx};
+        if settings.enable_color
+            idx = mod(ii, length(settings.colors));
+            if idx == 0, idx = len(settings.colors); end
+            color_ = settings.colors{idx};
         end
         idx = find(cellfun(@(s)strcmp(s, raygroups{ii}), obj.labels), 1);
-        plot_raygroup(gui.viewAxes, obj.data{idx}, obj.xtraces{idx}, scaleby, raygroups{ii}, color_);
+        plot_raygroup(gui.h.viewAxes, obj.data{idx}, obj.xtraces{idx}, max_amp, raygroups{ii}, color_);
     end
-    legend(gui.viewAxes, 'Location', 'northeast');
+    legend(gui.h.viewAxes, 'Location', 'northeast');
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_expand_all(src, event)
+function [] = on_expand_all(~, ~)
 % on_expand_all: expand all nodes of checkboxTree
-    nodes = gui.checkboxTree.Root.Children;
+    nodes = gui.h.checkboxTree.Root.Children;
     for ii = 1:length(nodes)
-        gui.checkboxTree.expandNode(nodes(ii));
+        gui.h.checkboxTree.expandNode(nodes(ii));
     end
 end
 
 %% -----------------------------------------------------------------------------
 function [] = on_collapse_all(src, event)
 % on_collapse_all: collapse all nodes of checkboxTree
-    nodes = gui.checkboxTree.Root.Children;
+    nodes = gui.h.checkboxTree.Root.Children;
     for ii = 1:length(nodes)
-        gui.checkboxTree.collapseNode(nodes(ii));
+        gui.h.checkboxTree.collapseNode(nodes(ii));
     end
 end
 
@@ -265,49 +304,52 @@ function [] = on_mouse_clicked(src, event)
         pause(0.2); %Add a delay to distinguish single click from a double click
         if chk == 1
             chk = [];
-            gui.clickType = 'single';
+            gui.pp.clickType = 'single';
         end
     else
         chk = [];
-        gui.clickType = 'double';
+        gui.pp.clickType = 'double';
     end
 end
 
 %% -----------------------------------------------------------------------------
 function [] = on_select_changed(src, event)
 % on_node_select: when any tree node is selected
-    % if isempty(gui.checkboxTree.SelectedNodes) return; end
-    % if isempty(gui.checkboxTree.SelectedNodes(1).UserData) return; end
-    % gui.scaleEdit.String = gui.checkboxTree.SelectedNodes(1).UserData;
-
-    fprintf('Selection Type: %s\n', src.SelectionType);
     if ~isempty(event.Nodes)
         node = event.Nodes(1);
-        gui.scaleEdit.String = node.UserData;
+        % gui.h.scaleEdit.String = node.UserData;
         pause(0.2);
-        if strcmp(gui.clickType, 'single'), return; end
+        if strcmp(gui.pp.clickType, 'single'), return; end
         % when double click, fast plot the selected raygroup
         raygroups = fun_get_end_nodes(node);
         fun_plot_raygroups(raygroups);
     end
 end
 
+%% on_control_panel_help: help control panel
+function [] = on_control_panel_help(src, event)
+    fprintf([
+        'Help for control panel:\n\t1. Tick one or multiple ray groups to plot.\n\t', ...
+        '2. Select one ray group to scale seismic amplitude to.\n\n']);
+    input('Press <Enter> to continue ...');
+end
+
 %% -----------------------------------------------------------------------------
 function [] = on_enable_color(src, event)
 % on_enable_color: enable color
-    enable_color = true;
+    settings.enable_color = true;
 end
 
 %% -----------------------------------------------------------------------------
 function [] = on_disable_color(src, event)
 % on_enable_color: disable color
-    enable_color = false;
+    settings.enable_color = false;
 end
 
 %% -----------------------------------------------------------------------------
 function [] = on_apply(src, event)
 % on_apply: on apply button clicked
-    redraw(gui, obj);
+    redraw();
 end
 
 function [] = on_readme(src, event)
@@ -318,12 +360,12 @@ end
 %% -----------------------------------------------------------------------------
 function [] = on_export_plot(src, event)
 % on_export_plot: export axes to a new figure
-    if ~isfield(gui, 'exportWindow') || ~ishandle(gui.exportWindow)
-        gui.exportWindow = figure();
+    if ~isfield(gui.h, 'exportWindow') || ~ishandle(gui.h.exportWindow)
+        gui.h.exportWindow = figure();
     else
-        figure(gui.exportWindow);
+        figure(gui.h.exportWindow);
     end
-    newAxes = copyobj(gui.viewAxes, gui.exportWindow);
+    newAxes = copyobj(gui.h.viewAxes, gui.h.exportWindow);
     % The original position is copied too, so adjust it.
     set(newAxes, 'Units', 'normalized', 'Position', get(groot, 'DefaultAxesPosition'));
 end
@@ -346,4 +388,230 @@ function [scaleby] = fun_get_max_amplitude(raygroup)
 end
 
 %% -----------------------------------------------------------------------------
+
+
+%% Settings window
+%% -----------------------------------------------------------------------------
+function [] = on_settings(src, event)
+% on_settings: open Settings window
+    if ~isfield(gui.h, 'settingsWindow') || ~ishandle(gui.h.settingsWindow)
+        gui.h.settingsWindow = figure(...
+            'Name', 'Settings', 'NumberTitle', 'off', 'MenuBar', 'none', ...
+            'ToolBar', 'none');
+    else
+        figure(gui.h.settingsWindow);
+    end
+    layout = uix.VBox('Parent', gui.h.settingsWindow, 'Padding', 10, 'Spacing', 10);
+    mainLayout = uix.HBox('Parent', layout, 'Padding', 0, 'Spacing', 30);
+    buttonArea = uix.HBox('Parent', layout, 'Padding', 0, 'Spacing', 8);
+    set(layout, 'Heights', [-1, 28]);
+
+    leftLayout = uix.VBox('Parent', mainLayout, 'Padding', 0, 'Spacing', 10);
+    rightLayout = uix.VBox('Parent', mainLayout, 'Padding', 0, 'Spacing', 10);
+    set(mainLayout, 'Widths', [300, 200]);
+
+    gui.h.st.xlimText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.xlim), ...
+        'Label', 'X Axis Range:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Callback', @on_num_pair_edited);
+
+    gui.h.st.ylimText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.ylim), ...
+        'Label', 'Y Axis Range:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Callback', @on_num_pair_edited);
+
+    gui.h.st.vredText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.vred), ...
+        'Label', 'v-reduce:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Callback', @on_vred_edited);
+
+    gui.h.st.tpiText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.tpi), ...
+        'Label', 'Traces per inch:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Callback', @on_num_edited);
+
+    gui.h.st.amplimText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.amp_lim), ...
+        'Label', 'Max amplitude:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Callback', @on_num_edited);
+
+    gui.h.st.fillWavePopup = uiw.widget.Popup(...
+        'Parent', leftLayout, ...
+        'Label', 'Fill waveform:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Items', {'NO', 'Black-White', 'Red-Blue'});
+
+    uix.Empty('Parent', leftLayout);
+    set(leftLayout, 'Heights', [ones(1, 6) * 25, -1]);
+
+    gui.h.st.colorList = uiw.widget.ListWithButtons(...
+        'Parent', rightLayout, ...
+        'Items', cellfun(@mat2str, settings.colors, 'UniformOutput', false), ...
+        'AllowAdd', true, ... %Requires callback implementation
+        'AllowCopy', false, ... %Requires callback implementation
+        'AllowDelete', true, ... %Requires callback implementation
+        'AllowEdit', false, ... %Requires callback implementation
+        'AllowMove', true, ... %Callback is optional
+        'AllowPlot', false, ... %Requires callback implementation
+        'AllowReverse', false, ... %Requires callback implementation
+        'AllowRun', false, ... %Requires callback implementation
+        'Callback', @color_list_callback, ...
+        'ButtonLocation', 'right', ...
+        'Label', 'Colors for plotting:', ...
+        'LabelLocation', 'top', ...
+        'LabelHeight', 18);
+
+    gui.h.st.colorSelector = uiw.widget.ColorSelector(...
+        'Parent', rightLayout, ...
+        'Value', settings.colors{1}, ...
+        'Callback', @on_color_edited, ...
+        'LabelVisible', 'off', ...
+        'Label', '', ...
+        'LabelLocation', 'right', ...
+        'LabelWidth', 30);
+
+    uix.Empty('Parent', rightLayout);
+    set(rightLayout, 'Heights', [250, 25, -1]);
+
+    uix.Empty('Parent', buttonArea);
+    uicontrol('Style', 'PushButton', 'Parent', buttonArea, 'String', 'OK', 'Callback', @on_settings_ok);
+    uicontrol('Style', 'PushButton', 'Parent', buttonArea, 'String', 'Cancel', 'Callback', @on_settings_cancel);
+    uicontrol('Style', 'PushButton', 'Parent', buttonArea, 'String', 'Apply', 'Callback', @on_settings_apply);
+    set(buttonArea, 'Widths', [-1, 80, 80, 80]);
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_num_edited(src, event)
+% when EditableText change, validate the value
+    if strcmp(event.Interaction, 'Edit')
+        is_valid = validate_num(event.NewValue);
+        if ~is_valid
+            fun_on_invalid_value(src, event);
+            src.Value = event.OldValue;
+        end
+    end
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_num_pair_edited(src, event)
+% when EditableText change, validate the value
+    if strcmp(event.Interaction, 'Edit')
+        is_valid = validate_num_pair(event.NewValue);
+        if ~is_valid
+            fun_on_invalid_value(src, event);
+            src.Value = event.OldValue;
+        end
+    end
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_vred_edited(src, event)
+% when EditableText change, validate the value
+    on_num_edited(src, event);
+    if strcmp(event.Interaction, 'Edit')
+        if str2num(event.NewValue) == 0
+            msg = sprintf('Vred can NOT be zero, maybe you want "Inf"');
+            fun_on_invalid_value(src, event, msg);
+            src.Value = 'Inf';
+        end
+    end
+end
+
+%% -----------------------------------------------------------------------------
+%% fun_on_invalid_value: when EditableText get invalid value
+function [] = fun_on_invalid_value(src, event, msg)
+    if nargin < 3
+        msg = sprintf('Invalid value for "%s" = %s', strip(strip(src.Label),'right',':'), src.Value);
+    end
+    h = errordlg(msg, 'Value Error');
+    % h.Position(3:4) = [250, 70];
+    htext = findobj(h, 'Type', 'Text');
+    htext.FontSize = 9;
+    set(h, 'Resize', 'on');
+end
+
+%% -----------------------------------------------------------------------------
+function [] = color_list_callback(src, event)
+% handle color list event
+    % color selected
+    if strcmp(event.Interaction, 'Selection')
+        gui.h.st.colorSelector.Value = src.SelectedItems{1};
+
+    % delete color
+    elseif strcmp(event.Interaction, 'Delete')
+        idx = src.SelectedIndex;
+        src.Items(src.SelectedIndex) = [];
+        if idx > length(src.Items), idx = idx - 1; end
+        src.SelectedIndex = idx;
+
+    % add color to the end of list
+    elseif strcmp(event.Interaction, 'Add')
+        src.Items{end+1} = fun_ensure_str(gui.h.st.colorSelector.Value);
+        src.SelectedIndex = length(src.Items);
+    end
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_color_edited(src, event)
+% when color is edited in ColorSelector
+    if strcmp(event.Interaction, 'Edit')
+        src.Value = [0, 0, 0];
+        src.Value = event.NewValue;
+    end
+    idx = gui.h.st.colorList.SelectedIndex;
+    gui.h.st.colorList.Items{idx} = fun_ensure_str(src.Value);
+    % avoid auto-resetting SelectedIndex
+    gui.h.st.colorList.SelectedIndex = idx;
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_settings_ok(~, ~)
+% when settings OK, save values and close settings window
+    on_settings_apply();
+    close(gui.h.settingsWindow);
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_settings_cancel(~, ~)
+% when canceling settings, restore values and close settings window
+    close(gui.h.settingsWindow);
+end
+
+%% -----------------------------------------------------------------------------
+function [] = on_settings_apply(~, ~)
+% when applying settings, save values and keep settings window alive
+    settings.colors = cellfun(@eval, gui.h.st.colorList.Items, 'UniformOutput', false);
+    settings.xlim = str2num(gui.h.st.xlimText.Value);
+    settings.ylim = str2num(gui.h.st.ylimText.Value);
+    settings.vred = str2num(gui.h.st.vredText.Value);
+    settings.tpi = str2num(gui.h.st.tpiText.Value);
+    settings.amp_lim = str2num(gui.h.st.amplimText.Value);
+    settings.fill_wave = gui.h.st.fillWavePopup.SelectedIndex;
+    redraw();
+end
+
+%% -----------------------------------------------------------------------------
+function [value] = fun_ensure_str(value)
+% ensure a value is char array or string type
+    if ~ischar(value) && ~isstring(value)
+        value = mat2str(value);
+    end
+end
+
+%% -----------------------------------------------------------------------------
+function [is_valid] = validate_num(value)
+% check if a string/char can be parsed into a num
+    value = str2num(value);
+    is_valid = ~isempty(value);
+end
+
+%% -----------------------------------------------------------------------------
+function [is_valid] = validate_num_pair(value)
+% check if a string/char can be parsed into a pair of nums(2 nums)
+    value = str2num(value);
+    is_valid = false;
+    if ~isempty(value) && numel(value) == 2
+        is_valid = true;
+    end
+end
+
 end
