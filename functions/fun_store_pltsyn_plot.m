@@ -42,6 +42,8 @@ function fun_store_pltsyn_plot(figs, working_dir)
     obj = struct();
     obj.labels = labels;
     obj.xtraces = xtraces;
+    % trace interval
+    obj.xinc = min(abs(diff(sort(xtraces{1}))));
     obj.data = data;
     obj.xlabel = fig1.CurrentAxes.XLabel.String;
     obj.ylabel = fig1.CurrentAxes.YLabel.String;

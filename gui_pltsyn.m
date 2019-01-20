@@ -23,29 +23,56 @@ function gui_pltsyn(working_dir)
             working_dir, data_name);
     end
 
-    % obj properties: labels, xtraces, data, xlabel, ylabel, xlim, ylim, vred
+    % obj properties: labels, xtraces, xinc, data, xlabel, ylabel, xlim, ylim, vred
     obj = load_plotdata(data_path);
 
     settings.colors = {'r', 'g', 'b', 'c', 'm', 'y', [1,0.65,0], [0.5,0.2,0.9], [0.6,0.8,0.2], [0.4,0.2,0.2], [0.4,0.4,1]};
     settings.enable_color = false;
-    settings.xlim = obj.xlim;
-    settings.ylim = obj.ylim;
+    settings.xlim = obj.xlim;       % x data limit
+    settings.ylim = obj.ylim;       % y data limit
     settings.xtick = sort(obj.xtraces{1});
     vred = obj.vred;
     if isempty(vred) || vred == 0, vred = inf; end
     settings.vred_orig = vred;      % original v-reduce
     settings.vred = vred;           % v-reduce
-    settings.tpi = 10;              % traces per inch
+    settings.xinc = obj.xinc;       % trace interval in x
+    settings.ntpi = 5;              % traces per inch
+    settings.mspi = 200;            % ms per inch
     settings.amp_lim = 0;           % set upper limit for amplitude when plotting
-    % fill waveform: 1 - NO fill; 2 - fill with Black-White; 3 - fill with Red-Blue.
-    settings.fill_wave = 1;
 
+    % fill waveform:
+    %   1. NO fill;
+    %   2. fill with Black-White;
+    %   3. fill with Red-Blue.
+    %   4. custom: set peak_fill and trough_fill.
+    settings.fill_wave_options = {'NO', 'Black-White', 'Red-Blue', 'Custom'};
+    settings.fill_wave = 1;
+    settings.peak_fill = [1, 1, 1];
+    settings.trough_fill = [1, 1, 1];
+
+    % gui is a struct with many properties attached to it
+    gui = struct();
+
+    % graphic handles of main window
     [xshots, raygroups] = get_raygroups_of_each_shot(obj.labels);
-    gui = create_interface(xshots, raygroups, 'shot-', 'raygroup-');
+    gui.h = create_interface(xshots, raygroups, 'shot-', 'raygroup-');
+
+    % handle window resize
+    set(gui.h.window, 'ResizeFcn', @on_window_resize);
+
+    % graphic handles of settings window
+    gui.h.st = struct();
+    % gui properties
+    gui.pp = struct();
+
     % expand all the tree branches by default
     on_expand_all();
+
+    % init view limit
+    fun_calc_view_limit();
+
     % init axes
-    set_axes();
+    % set_axes();
 
 
 %% -----------------------------------------------------------------------------
@@ -78,26 +105,26 @@ end
 
 
 %% -----------------------------------------------------------------------------
-function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node_prefix)
+function [h] = create_interface(tree_branches, tree_nodes, branch_prefix, node_prefix)
 % initialize interface
 % tree_branches, tree_nodes, branch_prefix, node_prefix are used to create CheckboxTree widget.
 
-    gui = struct();
-    gui.h.window = figure(...
+    h = struct();
+    h.window = figure(...
         'Name', 'GUI of rayinvr-pltsyn', 'NumberTitle', 'off', 'MenuBar', 'none', ...
         'ToolBar', 'figure');
 
     % + File menu
-    fileMenu = uimenu(gui.h.window, 'Label', 'File');
+    fileMenu = uimenu(h.window, 'Label', 'File');
     uimenu(fileMenu, 'Label', 'Export Plot', 'Callback', @on_export_plot);
     % uimenu(fileMenu, 'Label', 'Change Working Directory', 'Callback', @on_change_working_dir);
 
     % + Help menu
-    helpMenu = uimenu(gui.h.window, 'Label', 'Help');
+    helpMenu = uimenu(h.window, 'Label', 'Help');
     uimenu(helpMenu, 'Label', 'README', 'Callback', @on_readme);
 
     % Arrange the main interface
-    mainLayout = uix.HBoxFlex('Parent', gui.h.window, 'Spacing', 3);
+    mainLayout = uix.HBoxFlex('Parent', h.window, 'Spacing', 3);
 
     % + Create the panels
     controlPanel = uix.BoxPanel('Parent', mainLayout, 'Title', 'Select Ray Groups', 'HelpFcn', @on_control_panel_help);
@@ -107,26 +134,26 @@ function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node
     set(mainLayout, 'Widths', [200, -1]);
 
     % + Create the view
-    gui.h.viewAxes = axes('Parent', uicontainer('Parent', viewPanel));
+    h.viewAxes = axes('Parent', uicontainer('Parent', viewPanel));
     % Minimize the margin of axes
-    set(gui.h.viewAxes, 'LooseInset', get(gui.h.viewAxes, 'TightInset'));
+    set(h.viewAxes, 'LooseInset', get(h.viewAxes, 'TightInset'));
     % Add context menu to plot area
-    ctxmenu1 = uicontextmenu(gui.h.window);
-    gui.h.viewAxes.UIContextMenu = ctxmenu1;
+    ctxmenu1 = uicontextmenu(h.window);
+    h.viewAxes.UIContextMenu = ctxmenu1;
     uimenu(ctxmenu1, 'Label', 'Enable Color', 'Callback', @on_enable_color);
     uimenu(ctxmenu1, 'Label', 'Disable Color', 'Callback', @on_disable_color);
 
     % + Create the controls
     controlLayout = uix.VBox('Parent', controlPanel, 'Padding', 3, 'Spacing', 3);
-    gui.h.checkboxTree = uiw.widget.CheckboxTree(...
+    h.checkboxTree = uiw.widget.CheckboxTree(...
         'Parent', controlLayout, ...
         'MouseClickedCallback', @on_mouse_clicked, ...
         'SelectionChangeFcn', @on_select_changed ...
         );
-    gui.h.checkboxTree.Root.Name = 'Select All';
+    h.checkboxTree.Root.Name = 'Select All';
     for ii = 1:length(tree_branches)
         branch_id = tree_branches{ii};
-        branch = uiw.widget.CheckboxTreeNode('Name', strcat(branch_prefix, branch_id), 'Parent', gui.h.checkboxTree.Root);
+        branch = uiw.widget.CheckboxTreeNode('Name', strcat(branch_prefix, branch_id), 'Parent', h.checkboxTree.Root);
         branch.UserData = branch_id;
         branch_nodes = tree_nodes{ii};
         for jj = 1:length(branch_nodes)
@@ -139,8 +166,8 @@ function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node
     end
 
     % context menu for checkboxTree
-    ctxmenu2 = uicontextmenu(gui.h.window);
-    gui.h.checkboxTree.UIContextMenu = ctxmenu2;
+    ctxmenu2 = uicontextmenu(h.window);
+    h.checkboxTree.UIContextMenu = ctxmenu2;
     uimenu(ctxmenu2, 'Label', 'Expand All', 'Callback', @on_expand_all);
     uimenu(ctxmenu2, 'Label', 'Collapse All', 'Callback', @on_collapse_all);
 
@@ -157,6 +184,11 @@ function [gui] = create_interface(tree_branches, tree_nodes, branch_prefix, node
     set(controlLayout, 'Heights', [-1, 65]); % Make the list fill the space
 end
 
+function [] = on_window_resize(~, ~)
+% when window resize, recalculate view limit and redraw
+    fun_calc_view_limit();
+    redraw();
+end
 
 %% -----------------------------------------------------------------------------
 function [] = set_axes()
@@ -171,14 +203,83 @@ function [] = set_axes()
     end
     xlabel(ax, xlabel_, 'FontName', 'Consolas', 'FontSize', 11);
     ylabel(ax, ylabel_, 'FontName', 'Consolas', 'FontSize', 11);
-    xlim(ax, settings.xlim);
-    ylim(ax, settings.ylim);
-    % set(ax, 'XTick', settings.xtick, 'XTickLabel', [], 'XGrid', 'on');
-        % 'GridColorMode', 'manual', 'GridColor', 'k', 'GridAlpha', 1);
-    % ax.XAxis.MinorTickValues = settings.xtick;
-    % set(ax, 'XMinorGrid', 'on', 'MinorGridLineStyle', '-', 'MinorGridColor', 'k', ...
-    %     'MinorGridColorMode', 'manual', 'MinorGridAlpha', 0.1, 'MinorGridAlphaMode', 'manual');
+
+    % apply view limit
+    xlim(ax, gui.pp.vxlim);
+    ylim(ax, gui.pp.vylim);
+    % yticks(ax, settings.ylim(1):0.1:settings.ylim(2));
+
+    % set x and y sliders
+    if isfield(gui.h, 'xslider')
+        delete(gui.h.xslider);
+    end
+    if abs(diff(gui.pp.vxlim)) < abs(diff(settings.xlim))
+        gui.h.xslider = set_xslider(ax);
+    end
+
+    if isfield(gui.h, 'yslider')
+        delete(gui.h.yslider);
+    end
+    if abs(diff(gui.pp.vylim)) < abs(diff(settings.ylim))
+        gui.h.yslider = set_yslider(ax);
+    end
+
     box on;
+    ax.YAxis.TickDirection = 'out';
+
+end
+
+function [h] = set_xslider(ax)
+    % get ax position in pixels
+    old = get(ax, 'Units');
+    set(ax, 'Units', 'pixels');
+    axpos = ax.Position;
+    set(ax, 'Units', old);
+
+    xsliderpos = [axpos(1), axpos(2)-20-1, axpos(3), 20];
+    min_val = settings.xlim(1);
+    max_val = settings.xlim(2) - (gui.pp.vxlim(2) - gui.pp.vxlim(1));
+    % how many views that the data limit can split into
+    nview = ceil(diff(settings.xlim)/diff(gui.pp.vxlim));
+    h = uicontrol(...
+        'Style', 'slider', 'Parent', ax.Parent, 'Units', 'pixels', ...
+        'Position', xsliderpos, 'SliderStep', [1/nview/10, 1/nview], ...
+        'BackgroundColor', [220,220,220]/256, ...
+        'Min', min_val, 'Max', max_val, 'Value', gui.pp.vxlim(1), ...
+        'Callback', @scrollx);
+
+    function [] = scrollx(src, ~)
+        gui.pp.vxlim = gui.pp.vxlim + (src.Value - gui.pp.vxlim(1));
+        xlim(ax, gui.pp.vxlim);
+    end
+end
+
+function [h] = set_yslider(ax)
+    % get ax position in pixels
+    old = get(ax, 'Units');
+    set(ax, 'Units', 'pixels');
+    axpos = ax.Position;
+    set(ax, 'Units', old);
+
+    ysliderpos = [axpos(1)+axpos(3)+1, axpos(2), 20, axpos(4)];
+
+    % y slider is should be reversed because the y axis is reversed
+    min_val = settings.ylim(1);
+    max_val = settings.ylim(2) - (gui.pp.vylim(2) - gui.pp.vylim(1));
+    % how many views that the data limit can split into
+    nview = ceil(diff(settings.ylim)/diff(gui.pp.vylim));
+    h = uicontrol(...
+        'Style', 'slider', 'Parent', ax.Parent, 'Units', 'pixels', ...
+        'Position', ysliderpos, 'SliderStep', [1/nview/10, 1/nview], ...
+        'BackgroundColor', [220,220,220]/256, ...
+        'Min', min_val, 'Max', max_val, 'Value', (max_val - gui.pp.vylim(1)), ...
+        'Callback', @scrolly);
+
+    function [] = scrolly(src, ~)
+        gui.pp.vylim = gui.pp.vylim + ((src.Max - src.Value) - gui.pp.vylim(1));
+        ylim(ax, gui.pp.vylim);
+        % yticks(ax, settings.ylim(1):0.1:settings.ylim(2));
+    end
 end
 
 
@@ -230,6 +331,7 @@ function [] = fun_plot_raygroups(raygroups)
         max_shift = max_xtrace/settings.vred_orig - max_xtrace/settings.vred;
 
         for ii = 1:length(data)
+            % plot a single trace
             xydata = data{ii};
             x = xydata(1, :);
             y = xydata(2, :);
@@ -237,7 +339,7 @@ function [] = fun_plot_raygroups(raygroups)
             shift = xtraces(ii)/settings.vred_orig - xtraces(ii)/settings.vred;
             y = y + shift;
 
-            % fill reduce empty with zero amplitude wave
+            % align v-reduce shift with zero amplitude wave
             x = [xtraces(ii), x, xtraces(ii)];
             if shift >= 0
                 y = [settings.ylim(1), y, settings.ylim(2)+max_shift];
@@ -253,6 +355,19 @@ function [] = fun_plot_raygroups(raygroups)
             % only show legend for the first trace of ray group
             if ii ~= 1
                 set(get(get(curve,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
+            end
+
+            % fill peak and trough with colors
+            if settings.fill_wave ~= 1
+                % fill peak
+                pos = find(amp >= 0);
+                h = fill(ax, x(pos), y(pos), settings.peak_fill, 'EdgeColor', 'none');
+                set(get(get(h,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
+
+                % fill trough
+                neg = find(amp <= 0);
+                h = fill(ax, x(neg), y(neg), settings.trough_fill, 'EdgeColor', 'none');
+                set(get(get(h,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
             end
         end
     end
@@ -313,7 +428,7 @@ function [] = on_mouse_clicked(src, event)
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_select_changed(src, event)
+function [] = on_select_changed(~, event)
 % on_node_select: when any tree node is selected
     if ~isempty(event.Nodes)
         node = event.Nodes(1);
@@ -327,7 +442,7 @@ function [] = on_select_changed(src, event)
 end
 
 %% on_control_panel_help: help control panel
-function [] = on_control_panel_help(src, event)
+function [] = on_control_panel_help(~, ~)
     fprintf([
         'Help for control panel:\n\t1. Tick one or multiple ray groups to plot.\n\t', ...
         '2. Select one ray group to scale seismic amplitude to.\n\n']);
@@ -335,30 +450,30 @@ function [] = on_control_panel_help(src, event)
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_enable_color(src, event)
+function [] = on_enable_color(~, ~)
 % on_enable_color: enable color
     settings.enable_color = true;
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_disable_color(src, event)
+function [] = on_disable_color(~, ~)
 % on_enable_color: disable color
     settings.enable_color = false;
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_apply(src, event)
+function [] = on_apply(~, ~)
 % on_apply: on apply button clicked
     redraw();
 end
 
-function [] = on_readme(src, event)
+function [] = on_readme(~, ~)
 % on_readme: show readme
     !start gui_pltsyn_readme.txt
 end
 
 %% -----------------------------------------------------------------------------
-function [] = on_export_plot(src, event)
+function [] = on_export_plot(~, ~)
 % on_export_plot: export axes to a new figure
     if ~isfield(gui.h, 'exportWindow') || ~ishandle(gui.h.exportWindow)
         gui.h.exportWindow = figure();
@@ -394,13 +509,15 @@ end
 %% -----------------------------------------------------------------------------
 function [] = on_settings(src, event)
 % on_settings: open Settings window
-    if ~isfield(gui.h, 'settingsWindow') || ~ishandle(gui.h.settingsWindow)
-        gui.h.settingsWindow = figure(...
-            'Name', 'Settings', 'NumberTitle', 'off', 'MenuBar', 'none', ...
-            'ToolBar', 'none');
-    else
+    if isfield(gui.h, 'settingsWindow') && ishandle(gui.h.settingsWindow)
         figure(gui.h.settingsWindow);
+        return;
     end
+
+    gui.h.settingsWindow = figure(...
+        'Name', 'Settings', 'NumberTitle', 'off', 'MenuBar', 'none', ...
+        'ToolBar', 'none');
+
     layout = uix.VBox('Parent', gui.h.settingsWindow, 'Padding', 10, 'Spacing', 10);
     mainLayout = uix.HBox('Parent', layout, 'Padding', 0, 'Spacing', 30);
     buttonArea = uix.HBox('Parent', layout, 'Padding', 0, 'Spacing', 8);
@@ -412,36 +529,50 @@ function [] = on_settings(src, event)
 
     gui.h.st.xlimText = uiw.widget.EditableText(...
         'Parent', leftLayout, 'Value', mat2str(settings.xlim), ...
-        'Label', 'X Axis Range:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Label', 'X Axis Range', 'LabelLocation', 'left', 'LabelWidth', 100,...
         'Callback', @on_num_pair_edited);
 
     gui.h.st.ylimText = uiw.widget.EditableText(...
         'Parent', leftLayout, 'Value', mat2str(settings.ylim), ...
-        'Label', 'Y Axis Range:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Label', 'Y Axis Range', 'LabelLocation', 'left', 'LabelWidth', 100,...
         'Callback', @on_num_pair_edited);
 
     gui.h.st.vredText = uiw.widget.EditableText(...
         'Parent', leftLayout, 'Value', mat2str(settings.vred), ...
-        'Label', 'v-reduce:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Label', 'v-reduce', 'LabelLocation', 'left', 'LabelWidth', 100,...
         'Callback', @on_vred_edited);
 
-    gui.h.st.tpiText = uiw.widget.EditableText(...
-        'Parent', leftLayout, 'Value', mat2str(settings.tpi), ...
-        'Label', 'Traces per inch:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+    gui.h.st.ntpiText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.ntpi), ...
+        'Label', 'Traces per Inch', 'LabelLocation', 'left', 'LabelWidth', 100,...
+        'Callback', @on_num_edited);
+
+    gui.h.st.mspiText = uiw.widget.EditableText(...
+        'Parent', leftLayout, 'Value', mat2str(settings.mspi), ...
+        'Label', 'T(ms) per Inch', 'LabelLocation', 'left', 'LabelWidth', 100,...
         'Callback', @on_num_edited);
 
     gui.h.st.amplimText = uiw.widget.EditableText(...
         'Parent', leftLayout, 'Value', mat2str(settings.amp_lim), ...
-        'Label', 'Max amplitude:', 'LabelLocation', 'left', 'LabelWidth', 110,...
+        'Label', 'Max Amplitude', 'LabelLocation', 'left', 'LabelWidth', 100,...
         'Callback', @on_num_edited);
 
     gui.h.st.fillWavePopup = uiw.widget.Popup(...
-        'Parent', leftLayout, ...
-        'Label', 'Fill waveform:', 'LabelLocation', 'left', 'LabelWidth', 110,...
-        'Items', {'NO', 'Black-White', 'Red-Blue'});
+        'Parent', leftLayout, 'Items', settings.fill_wave_options, ...
+        'Label', 'Fill Waveform', 'LabelLocation', 'left', 'LabelWidth', 100,...
+        'SelectedIndex', settings.fill_wave, 'Callback', @on_fill_wave_selected);
+
+    gui.h.st.fillPeakColorSelector = uiw.widget.ColorSelector(...
+        'Parent', leftLayout, 'Label', 'peak-fill', 'LabelWidth', 100, ...
+        'LabelHorizontalAlignment', 'right', ...
+        'Value', settings.peak_fill, 'Enable', 'off');
+    gui.h.st.fillTroughColorSelector = uiw.widget.ColorSelector(...
+        'Parent', leftLayout, 'Label', 'trough-fill', 'LabelWidth', 100, ...
+        'LabelHorizontalAlignment', 'right', ...
+        'Value', settings.trough_fill, 'Enable', 'off');
 
     uix.Empty('Parent', leftLayout);
-    set(leftLayout, 'Heights', [ones(1, 6) * 25, -1]);
+    set(leftLayout, 'Heights', [ones(1, 9) * 25, -1]);
 
     gui.h.st.colorList = uiw.widget.ListWithButtons(...
         'Parent', rightLayout, ...
@@ -456,7 +587,7 @@ function [] = on_settings(src, event)
         'AllowRun', false, ... %Requires callback implementation
         'Callback', @color_list_callback, ...
         'ButtonLocation', 'right', ...
-        'Label', 'Colors for plotting:', ...
+        'Label', 'Colors for plotting', ...
         'LabelLocation', 'top', ...
         'LabelHeight', 18);
 
@@ -530,6 +661,27 @@ function [] = fun_on_invalid_value(src, event, msg)
 end
 
 %% -----------------------------------------------------------------------------
+function [] = on_fill_wave_selected(src, event)
+% when fillWavePopup selection
+    enable = 'off';
+    if strcmp(lower(src.Value), lower('NO'))
+        set(gui.h.st.fillPeakColorSelector, 'Value', [1, 1, 1]);
+        set(gui.h.st.fillTroughColorSelector, 'Value', [1, 1, 1]);
+    elseif strcmp(lower(src.Value), lower('Black-White'))
+        set(gui.h.st.fillPeakColorSelector, 'Value', [0, 0, 0]);
+        set(gui.h.st.fillTroughColorSelector, 'Value', [1, 1, 1]);
+    elseif strcmp(lower(src.Value), lower('Red-Blue'))
+        set(gui.h.st.fillPeakColorSelector, 'Value', [1, 0, 0]);
+        set(gui.h.st.fillTroughColorSelector, 'Value', [0, 0, 1]);
+    elseif strcmp(lower(src.Value), lower('Custom'))
+        enable = 'on';
+    end
+
+    set(gui.h.st.fillPeakColorSelector, 'Enable', enable);
+    set(gui.h.st.fillTroughColorSelector, 'Enable', enable);
+end
+
+%% -----------------------------------------------------------------------------
 function [] = color_list_callback(src, event)
 % handle color list event
     % color selected
@@ -583,10 +735,57 @@ function [] = on_settings_apply(~, ~)
     settings.xlim = str2num(gui.h.st.xlimText.Value);
     settings.ylim = str2num(gui.h.st.ylimText.Value);
     settings.vred = str2num(gui.h.st.vredText.Value);
-    settings.tpi = str2num(gui.h.st.tpiText.Value);
+    settings.ntpi = str2num(gui.h.st.ntpiText.Value);
+    settings.mspi = str2num(gui.h.st.mspiText.Value);
     settings.amp_lim = str2num(gui.h.st.amplimText.Value);
     settings.fill_wave = gui.h.st.fillWavePopup.SelectedIndex;
+    settings.peak_fill = gui.h.st.fillPeakColorSelector.Value;
+    settings.trough_fill = gui.h.st.fillTroughColorSelector.Value;
+    % update view limit
+    fun_calc_view_limit();
     redraw();
+end
+
+function [] = fun_calc_view_limit()
+% fun_calc_view_limit: calculate view limit of x and y directory
+    % get ax position in inches
+    ax = gui.h.viewAxes;
+    old = get(ax, 'Units');
+    set(ax, 'Units', 'inches');
+    axpos = ax.Position;
+    set(ax, 'Units', old);
+
+    % calculate view length
+    width_inch = axpos(3);
+    height_inch = axpos(4);
+    xlen = width_inch * settings.ntpi * settings.xinc;
+    ylen = height_inch * settings.mspi / 1e3;
+
+    % if view limit is not set yet, use data limit as default
+    if isfield(gui.pp, 'vxlim') && ~isempty(gui.pp.vxlim)
+        old_vxlim = gui.pp.vxlim;
+        old_vylim = gui.pp.vylim;
+    else
+        old_vxlim = settings.xlim;
+        old_vylim = settings.ylim;
+    end
+
+    % calculate x and y view limit by ntpi and mspi respectively
+    % apply left-alignment on new view and old view
+    gui.pp.vxlim = old_vxlim(1) + [0, xlen];
+    gui.pp.vylim = old_vylim(1) + [0, ylen];
+
+    % % when view limit out of range, adjust it by upper limit
+    % if gui.pp.vxlim(2) > settings.xlim(2)
+    %     shift = gui.pp.vxlim(2) - settings.xlim(2);
+    %     gui.pp.vxlim = gui.pp.vxlim - shift;
+    %     gui.pp.vxlim(1) = max(gui.pp.vxlim(1), settings.xlim(1));
+    % end
+    % if gui.pp.vylim(2) > settings.ylim(2)
+    %     shift = gui.pp.vylim(2) - settings.ylim(2);
+    %     gui.pp.vylim = gui.pp.vylim - shift;
+    %     gui.pp.vylim(1) = max(gui.pp.vylim(1), settings.ylim(1));
+    % end
 end
 
 %% -----------------------------------------------------------------------------
