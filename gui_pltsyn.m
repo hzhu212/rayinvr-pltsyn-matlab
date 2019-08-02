@@ -8,11 +8,11 @@ function gui_pltsyn(working_dir)
 % gui_pltsyn(working_dir)
 % @param: working_dir: the directory that contains "plotdata.pltsyn.mat".(i.e. the *.in folder)
 
-    working_dir = 'D:\Archive\Research\rayinvr\rayinvr-data\examples\e3';
-    % if nargin < 1
-    %     fprintf('Argument "working_dir" is required.\n');
-    %     return;
-    % end
+    % working_dir = 'D:\Archive\Research\rayinvr\rayinvr-data\examples\e3';
+    if nargin < 1
+        fprintf('Argument "working_dir" is required.\n');
+        return;
+    end
 
     data_name = 'plotdata.pltsyn.mat';
     data_path = fullfile(working_dir, data_name);
@@ -69,7 +69,7 @@ function gui_pltsyn(working_dir)
     on_expand_all();
 
     % init view limit
-    fun_calc_view_limit();
+    fun_update_view_limit();
 
     % init axes
     % set_axes();
@@ -186,7 +186,7 @@ end
 
 function [] = on_window_resize(~, ~)
 % when window resize, recalculate view limit and redraw
-    fun_calc_view_limit();
+    fun_update_view_limit();
     redraw();
 end
 
@@ -240,10 +240,12 @@ function [h] = set_xslider(ax)
     min_val = settings.xlim(1);
     max_val = settings.xlim(2) - (gui.pp.vxlim(2) - gui.pp.vxlim(1));
     % how many views that the data limit can split into
-    nview = ceil(diff(settings.xlim)/diff(gui.pp.vxlim));
+    nview = diff(settings.xlim) / diff(gui.pp.vxlim);
+    % 'SliderStep', [1/nview/20, 1/(nview-1)] 的含义：
+    % 画面总长度为 nview 个 view，滚动一个滑块的长度对应一个 view，点击滚动按钮1次滚动滑块长度的 1/20
     h = uicontrol(...
         'Style', 'slider', 'Parent', ax.Parent, 'Units', 'pixels', ...
-        'Position', xsliderpos, 'SliderStep', [1/nview/10, 1/nview], ...
+        'Position', xsliderpos, 'SliderStep', [1/nview/20, 1/(nview-1)], ...
         'BackgroundColor', [220,220,220]/256, ...
         'Min', min_val, 'Max', max_val, 'Value', gui.pp.vxlim(1), ...
         'Callback', @scrollx);
@@ -267,10 +269,10 @@ function [h] = set_yslider(ax)
     min_val = settings.ylim(1);
     max_val = settings.ylim(2) - (gui.pp.vylim(2) - gui.pp.vylim(1));
     % how many views that the data limit can split into
-    nview = ceil(diff(settings.ylim)/diff(gui.pp.vylim));
+    nview = diff(settings.ylim) / diff(gui.pp.vylim);
     h = uicontrol(...
         'Style', 'slider', 'Parent', ax.Parent, 'Units', 'pixels', ...
-        'Position', ysliderpos, 'SliderStep', [1/nview/10, 1/nview], ...
+        'Position', ysliderpos, 'SliderStep', [1/nview/20, 1/(nview-1)], ...
         'BackgroundColor', [220,220,220]/256, ...
         'Min', min_val, 'Max', max_val, 'Value', (max_val - gui.pp.vylim(1)), ...
         'Callback', @scrolly);
@@ -351,7 +353,7 @@ function [] = fun_plot_raygroups(raygroups)
             amp = x - xtraces(ii);
             amp = amp * scale_rate;
             x = xtraces(ii) + amp;
-            curve = plot(ax, x, y, '-', 'Color', color_, 'LineWidth', 0.5, 'DisplayName', name);
+            curve = plot(ax, x, y, 'LineStyle', '-', 'Color', color_, 'LineWidth', 0.5, 'DisplayName', name);
             % only show legend for the first trace of ray group
             if ii ~= 1
                 set(get(get(curve,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
@@ -742,12 +744,12 @@ function [] = on_settings_apply(~, ~)
     settings.peak_fill = gui.h.st.fillPeakColorSelector.Value;
     settings.trough_fill = gui.h.st.fillTroughColorSelector.Value;
     % update view limit
-    fun_calc_view_limit();
+    fun_update_view_limit();
     redraw();
 end
 
-function [] = fun_calc_view_limit()
-% fun_calc_view_limit: calculate view limit of x and y directory
+function [] = fun_update_view_limit()
+% fun_update_view_limit: calculate view limit of x and y directory
     % get ax position in inches
     ax = gui.h.viewAxes;
     old = get(ax, 'Units');
