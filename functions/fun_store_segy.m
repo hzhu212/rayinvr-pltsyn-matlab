@@ -5,10 +5,12 @@ function fun_store_segy(figs, working_dir)
     % Seislab 包初始化
     presets;
 
-    path_rin = fullfile(working_dir, 'r.in');
-    path_sin = fullfile(working_dir, 's.in');
-    s_rin = run2struct(fun_trans_rin2m(path_rin));
-    s_sin = run2struct(fun_trans_rin2m(path_sin));
+    path_rin = fun_trans_rin2m(fullfile(working_dir, 'r.in'));
+    path_sin = fun_trans_rin2m(fullfile(working_dir, 's.in'));
+    clear(path_rin);
+    clear(path_sin);
+    s_rin = run2struct(path_rin);
+    s_sin = run2struct(path_sin);
 
     % 地震数据头信息
     base = struct();
@@ -28,11 +30,13 @@ function fun_store_segy(figs, working_dir)
         'depth', 'm', 'Source depth below surface'; ...
         'offset', 'm', 'offset'; ...
     };
-    offset = s_rin.xmins:s_rin.xincs:s_rin.xmaxs;
+
+    % offset 转化为以米为单位
+    offset = int32(s_rin.xmins * 1000):int32(s_rin.xincs * 1000):int32(s_rin.xmaxs * 1000);
     base.headers = [ ...
         1:length(offset); ...
         ones(1, length(offset)) * 1201; ...
-        offset * 1000; ...
+        offset; ...
     ];
 
     % 从 figure 对象中提取数据
@@ -54,8 +58,9 @@ function fun_store_segy(figs, working_dir)
         labels{end+1} = curve.UserData.tag;
 
         % 按照地震数据纵轴的要求，对 curve 进行线性插值。同时去掉偏移量。
-        traces{end+1} = interp1(curve.YData * 1000, curve.XData, time_axis) - curve.UserData.xtrace;
+        traces{end+1} = interp1(curve.YData * 1000, curve.XData - curve.UserData.xtrace, time_axis);
     end
+    xtraces = int32(xtraces * 1000);
 
     % 按照炮点以及事件分组
     [labels, idx] = sort(labels);

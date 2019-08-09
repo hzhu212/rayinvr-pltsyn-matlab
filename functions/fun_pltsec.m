@@ -199,7 +199,9 @@ function [figs] = fun_pltsyn(vred, xomit, nskip, ipol, tol, nptsw, itrev, idump,
             tline = fgetl(fid_11);
         end
 
+        dist_ = [dist_, 0];
         all_xreceivers = dist_(1:find(diff(dist_)<0, 1));
+        dist_(end) = [];
 
         if iamp > 0
             [xrs, trs, urs, irs] = fun_load_txin(path_txout);
