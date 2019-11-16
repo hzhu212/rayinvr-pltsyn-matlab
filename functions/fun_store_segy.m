@@ -26,18 +26,30 @@ function fun_store_segy(figs, working_dir)
 
     % header 信息
     base.header_info = { ...
-        'ds_seqno', NaN, 'Trace sequence number within line'; ...
-        'depth', 'm', 'Source depth below surface'; ...
-        'offset', 'm', 'offset'; ...
+        'ds_seqno', 'n/a', 'Trace sequence number within line'; ...
+        'cdp', 'n/a', 'CDP sequence number'; ...
+        'cdp_x', 'm', 'X-coordinate of CDP'; ...
+        'cdp_y', 'm', 'Y-coordinate of CDP'; ...
+        'iline_no', 'n/a', 'In-line number'; ...
+        'xline_no', 'n/a', 'Cross-line number'; ...
+        'offset', 'm', 'Offset'; ...
     };
 
-    % offset 转化为以米为单位
-    offset = int32(s_rin.xmins * 1000):int32(s_rin.xincs * 1000):int32(s_rin.xmaxs * 1000);
+    % 接收点 X 坐标转化为以米为单位
+    xreceivers = int32(s_rin.xmins * 1000):int32(s_rin.xincs * 1000):int32(s_rin.xmaxs * 1000);
+    ntraces = length(xreceivers);
     base.headers = [ ...
-        1:length(offset); ...
-        ones(1, length(offset)) * 1201; ...
-        offset; ...
+        1:ntraces; ...
+        1:ntraces; ...
+        zeros(1, ntraces); ...
+        xreceivers; ...
+        ones(1, ntraces); ...
+        1:ntraces; ...
+        xreceivers; ...
     ];
+
+    % write_segy_file 的额外参数，用于指定如何保存 headers
+    segy_header_params = {'headers',{'cdp_x',73,4},{'cdp_y',77,4},{'iline_no',181,4},{'xline_no',185,4}};
 
     % 从 figure 对象中提取数据
     all_curves = [];
@@ -75,27 +87,39 @@ function fun_store_segy(figs, working_dir)
     % 同时，将缺失的（没有震动） trace，以 0 振幅补齐。
     default_trace = zeros(size(time_axis));
     for ii = 1:numel(traces)
-        missed = setdiff(offset, xtraces{ii});
+        missed = setdiff(xreceivers, xtraces{ii});
         [~, idx] = sort([xtraces{ii}, missed]);
         ts = [traces{ii}, repmat({default_trace}, 1, length(missed))];
         traces{ii} = ts(idx);
     end
 
     % 保存数据
+    % 为了在导入 HRS 时不用再重新命名数据集的名称，使用路径的一部分作为 segy 文件的前缀，以示区分
+    splited_path = strsplit(working_dir, filesep());
+    file_prefix = [strjoin(splited_path(end-1:end), '-'), '-'];
     outdir = fullfile(working_dir, 'segy');
     if ~exist(outdir, 'dir')
         mkdir(outdir);
     end
     for ii = 1:numel(labels)
+        label = labels{ii};
+
         % % 只保存叠加后的数据，忽略单个事件的数据
-        % if ~endsWith(labels{ii}, 'stacked')
+        % if ~endsWith(label, 'stacked')
         %     continue;
         % end
 
-        file = fullfile(outdir, [labels{ii}, '.sgy']);
+        % 根据炮点坐标计算接收点的 offset
+        tmp = strsplit(label, '-');
+        shot_position = int32(str2double(tmp{1}) * 1000);
+        offset = xreceivers - shot_position;
+
         seismic = struct(base);
-        seismic.name = labels{ii};
+        seismic.name = label;
         seismic.traces = cell2mat(traces{ii});
-        write_segy_file(seismic, file, {'print', 0});
+        seismic.headers(end, :) = offset;
+
+        file = fullfile(outdir, [file_prefix, label, '.sgy']);
+        write_segy_file(seismic, file, segy_header_params);
     end
 end
